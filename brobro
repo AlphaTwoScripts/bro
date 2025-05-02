@@ -1,4 +1,4 @@
--- Tekkit-Style Titan Auto-Farm Script with Smooth Hover (Aot:R)
+-- Tekkit-Style Continuous Hover Titan Auto-Farm (Aot:R)
 -- Client-side LocalScript
 
 local TweenService = game:GetService("TweenService")
@@ -10,8 +10,8 @@ local Options = {
     AutoFarm       = { Value = true },
     NapeExtender   = { Value = true },
     HitboxSize     = { Value = 15 },          -- Enlarged hitbox for top-down touch
-    TweenHeights   = { Up = 100, Hover = 15 },
-    TweenTimes     = { Up = 0.4, Across = 0.5, Hover = 0.5 }
+    HoverHeight    = 100,                     -- Constant altitude above nape
+    TweenTimes     = { Across = 0.5, Hover = 0.5 }
 }
 
 -- References
@@ -21,7 +21,6 @@ local hrp = character:WaitForChild("HumanoidRootPart")
 
 -- Smooth hover using BodyPosition for a springy settle
 local function smoothHover(part, targetPos, duration)
-    part.Anchored = false
     local bodyPos = Instance.new("BodyPosition")
     bodyPos.Parent = part
     bodyPos.MaxForce = Vector3.new(1e5, 1e5, 1e5)
@@ -32,42 +31,46 @@ local function smoothHover(part, targetPos, duration)
     bodyPos:Destroy()
 end
 
--- Swoop up, across, then smooth hover above nape
-local function swoopAndSmoothHover(hrp, nape)
-    -- 1) Fly straight up (anchored)
+-- Horizontal chop+hover tween (Tekkit style)
+local function moveAndHover(hrp, targetPos)
+    -- Keep anchored to avoid physics fight during horizontal move
     hrp.Anchored = true
-    local upTarget = hrp.Position + Vector3.new(0, Options.TweenHeights.Up, 0)
-    local upTween = TweenService:Create(
-        hrp,
-        TweenInfo.new(Options.TweenTimes.Up, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-        { CFrame = CFrame.new(upTarget) }
-    )
-    upTween:Play()
-    upTween.Completed:Wait()
 
-    -- 2) Fly across while staying high
-    local acrossTarget = nape.Position + Vector3.new(0, Options.TweenHeights.Up, 0)
-    local acrossTween = TweenService:Create(
-        hrp,
-        TweenInfo.new(Options.TweenTimes.Across, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
-        { CFrame = CFrame.new(acrossTarget) }
-    )
-    acrossTween:Play()
-    acrossTween.Completed:Wait()
+    -- Move horizontally (preserve height in targetPos)
+    local moveCFrame = CFrame.new(targetPos)
+    TweenService:Create(hrp, TweenInfo.new(Options.TweenTimes.Across, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), {CFrame = moveCFrame}):Play():Completed:Wait()
 
-    -- 3) Smooth hover above target
-    local hoverPos = nape.Position + Vector3.new(0, Options.TweenHeights.Hover, 0)
-    -- Unanchor before applying physics
+    -- Unanchor and apply smooth hover settle
     hrp.Anchored = false
-    smoothHover(hrp, hoverPos, Options.TweenTimes.Hover)
+    smoothHover(hrp, targetPos, Options.TweenTimes.Hover)
 end
 
--- Main auto-farm loop
+-- Main auto-farm function
 local function autoFarm()
+    -- Wait for Titans folder
+    repeat
+        task.wait(1)
+    until Workspace:FindFirstChild("Titans")
+
+    -- Initial ascend to global hover altitude above first Titan
+    if Options.AutoFarm.Value then
+        -- Find a target Titan to hover above
+        local firstTitan = Workspace.Titans:FindFirstChildWhichIsA("Model")
+        if firstTitan and firstTitan:FindFirstChild("Hitboxes") then
+            local nape = firstTitan.Hitboxes:FindFirstChild("Hit") and firstTitan.Hitboxes.Hit:FindFirstChild("Nape")
+            if nape then
+                local startPos = nape.Position + Vector3.new(0, Options.HoverHeight, 0)
+                hrp.CFrame = CFrame.new(startPos)
+                task.wait(0.2)
+            end
+        end
+    end
+
+    -- Continuous loop
     while Options.AutoFarm.Value do
         local titansFolder = Workspace:FindFirstChild("Titans")
         if not titansFolder then
-            warn("[AutoFarm] Titans folder not found, retrying...")
+            warn("[AutoFarm] Titans folder missing. Retrying...")
             task.wait(1)
             continue
         end
@@ -86,23 +89,26 @@ local function autoFarm()
             return (a.nape.Position - hrp.Position).Magnitude < (b.nape.Position - hrp.Position).Magnitude
         end)
 
-        -- Process each Titan
+        -- Iterate and hover over each Titan
         for _, entry in ipairs(titanList) do
             local titan = entry.model
             local nape = entry.nape
 
-            -- Extend Nape vertically
+            -- Extend Nape for hover touch
             if Options.NapeExtender.Value then
                 nape.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
                 nape.Transparency = 0.85
                 nape.CanCollide = false
-                print("[AutoFarm] Extended Nape for:", titan.Name)
+                print("[AutoFarm] Nape extended for:", titan.Name)
             end
 
-            -- Swoop and smooth hover
-            swoopAndSmoothHover(hrp, nape)
+            -- Calculate hover position
+            local hoverPos = nape.Position + Vector3.new(0, Options.HoverHeight, 0)
 
-            -- Simulate touch attack or replace with remote fire if needed
+            -- Move horizontally and hover
+            moveAndHover(hrp, hoverPos)
+
+            -- Simulate touch attack
             firetouchinterest(hrp, nape, 0)
             task.wait(0.1)
             firetouchinterest(hrp, nape, 1)
@@ -115,5 +121,5 @@ local function autoFarm()
     end
 end
 
--- Start auto-farming
+-- Start farming
 spawn(autoFarm)
