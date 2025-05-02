@@ -260,78 +260,47 @@ local AutoEscapeToggle = Tabs.Features:AddToggle("AutoEscapeEnabled", {
                         local buttonsGui = interface:FindFirstChild("Buttons")
                         
                         if buttonsGui then
-                            -- First, try to find and trigger the mobile touch buttons
-                            local mobileButtonFound = false
+                            -- Find the correct key to press
+                            local keyToPress = nil
                             
-                            -- Look for mobile-specific UI elements
-                            local mobileUI = interface:FindFirstChild("MobileButtons") or interface:FindFirstChild("TouchButtons") or buttonsGui
-                            
-                            if mobileUI then
-                                for _, obj in ipairs(mobileUI:GetDescendants()) do
-                                    if (obj:IsA("ImageButton") or obj:IsA("TextButton")) and obj.Visible then
-                                        -- Try to directly fire the button's events
-                                        pcall(function()
-                                            -- Fire all possible events to ensure it works
-                                            firesignal(obj.MouseButton1Click)
-                                            firesignal(obj.MouseButton1Down)
-                                            firesignal(obj.Activated)
-                                            obj:Activate()
-                                            mobileButtonFound = true
-                                        end)
-                                    end
+                            for _, button in ipairs(buttonsGui:GetChildren()) do
+                                if button:IsA("CanvasGroup") and button:FindFirstChild("Interact") and button.Interact.Visible then
+                                    keyToPress = button.Name
+                                    break
                                 end
                             end
                             
-                            -- If no mobile buttons were found/activated, fall back to keyboard simulation
-                            if not mobileButtonFound then
-                                for _, button in ipairs(buttonsGui:GetChildren()) do
-                                    if button:IsA("CanvasGroup") and button:FindFirstChild("Interact") then
-                                        local keyName = button.Name
-                                        
-                                        -- Try various methods to send input
-                                        -- 1. Virtual Input Manager
-                                        pcall(function()
-                                            game:GetService("VirtualInputManager"):SendKeyEvent(true, keyName, false, game)
-                                            task.wait(0.05)
-                                            game:GetService("VirtualInputManager"):SendKeyEvent(false, keyName, false, game)
-                                        end)
-                                        
-                                        -- 2. Try to directly fire the UI events
-                                        pcall(function()
-                                            firesignal(button.Interact.MouseButton1Click)
-                                            firesignal(button.Interact.MouseButton1Down)
-                                            firesignal(button.Interact.Activated)
-                                        end)
-                                        
-                                        -- 3. For mobile touch simulation
-                                        pcall(function()
-                                            button.Interact:Activate()
-                                        end)
-                                    end
-                                end
-                            end
-                            
-                            -- Additional mobile-specific attempt - simulate screen tap
-                            pcall(function()
-                                local centerX = workspace.CurrentCamera.ViewportSize.X / 2
-                                local centerY = workspace.CurrentCamera.ViewportSize.Y / 2
+                            if keyToPress then
+                                -- For PC: Simulate keyboard input
+                                pcall(function()
+                                    local VIM = game:GetService("VirtualInputManager")
+                                    VIM:SendKeyEvent(true, keyToPress, false, game)
+                                    task.wait(0.05)
+                                    VIM:SendKeyEvent(false, keyToPress, false, game)
+                                end)
                                 
-                                game:GetService("VirtualInputManager"):SendTouchEvent(
-                                    0, -- touchId (0 = first finger)
-                                    true, -- isPressing
-                                    centerX, 
-                                    centerY, 
-                                    0 -- gameProcessedEvent
-                                )
-                                task.wait(0.05)
-                                game:GetService("VirtualInputManager"):SendTouchEvent(
-                                    0, -- touchId
-                                    false, -- isPressing
-                                    centerX, 
-                                    centerY, 
-                                    0 -- gameProcessedEvent
-                                )
-                            end)
+                                -- For Mobile: Find and activate the mobile-specific button
+                                local mobileButton = nil
+                                
+                                -- Try to find the mobile button corresponding to the key
+                                for _, obj in ipairs(interface:GetDescendants()) do
+                                    if (obj:IsA("ImageButton") or obj:IsA("TextButton")) and 
+                                       obj.Visible and 
+                                       (obj.Name == keyToPress or 
+                                        (obj.Name:lower():find("escape") or 
+                                         (obj:FindFirstChild("Label") and obj:FindFirstChild("Label").Text == keyToPress))) then
+                                        mobileButton = obj
+                                        break
+                                    end
+                                end
+                                
+                                -- Activate the mobile button if found
+                                if mobileButton then
+                                    pcall(function()
+                                        mobileButton:Activate()
+                                    end)
+                                end
+                            end
                         end
                     end
                 end
