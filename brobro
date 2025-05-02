@@ -349,6 +349,27 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
             local rootPart = character:WaitForChild("HumanoidRootPart")
             local humanoid = character:WaitForChild("Humanoid")
 
+            -- Camera Hijack: switch to Scriptable and disable default camera scripts
+            local cam = workspace.CurrentCamera
+            cam.CameraType = Enum.CameraType.Scriptable
+            cam.CameraSubject = rootPart
+
+            local function disableDefaultCamera()
+                for _, folder in ipairs({player:WaitForChild("PlayerScripts"), player:WaitForChild("StarterPlayerScripts")}) do
+                    for _, child in ipairs(folder:GetChildren()) do
+                        if child.Name:match("Camera") and child:IsA("LocalScript") then
+                            child.Disabled = true
+                        elseif child.Name:match("Camera") and child:IsA("ModuleScript") then
+                            local ok, mod = pcall(require, child)
+                            if ok and type(mod.Disable) == "function" then
+                                mod.Disable()
+                            end
+                        end
+                    end
+                end
+            end
+            disableDefaultCamera()
+
             local config = {
                 flySpeed = 450,
                 attackRange = 20,
@@ -482,7 +503,7 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
                 end
             end)
 
-            notify("TweenFarm Activated", "Smooth airborne titan farming enabled.", 3)
+            notify("TweenFarm Activated", "Smooth airborne titan farming enabled with camera locked.", 3)
 
         else
             _G.TweenFarmEnabled = false
