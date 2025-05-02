@@ -327,7 +327,6 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
                 flySpeed = 450,
                 attackRange = 20,
                 clickInterval = 0.05,
-                skillInterval = 5,
                 targetCooldown = 3,
                 healThreshold = 0.4,
                 inactivityTimeout = 8,
@@ -343,10 +342,8 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
                 titan = nil,
                 tween = nil,
                 lastAttack = 0,
-                lastSkill = 0,
                 lastTargetChange = 0,
                 lastActivity = tick(),
-                skillsUsed = {false, false, false, false},
                 connections = {} -- Store connections for cleanup
             }
 
@@ -553,18 +550,6 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
                 end
             end)
 
-            -- Auto skill use
-            local function useSkill()
-                if tick() - farm.lastSkill < config.skillInterval then return end
-                local keys = {Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four}
-                for i, key in ipairs(keys) do
-                    VIM:SendKeyEvent(true, key, false, game)
-                    task.wait(0.05)
-                    VIM:SendKeyEvent(false, key, false, game)
-                end
-                farm.lastSkill = tick()
-            end
-
             -- Select best titan
             local function getNearestTitan()
                 local best
@@ -706,10 +691,7 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
                             local flyTarget = getFlyThroughPosition(farm.titan)
                             if flyTarget then
                                 local flyDone = smoothFlyTo(flyTarget)
-                                if flyDone and flyDone() then
-                                    -- No need to call performAttack() as we're using M1 auto-clicker now
-                                    useSkill()
-                                end
+                                -- We don't use skills after flying anymore
                             end
                         else
                             task.wait(0.5)
@@ -722,7 +704,7 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
                 cleanup()
             end)
 
-            notify("TweenFarm Activated", "Flying smooth farming enabled with M1 clicking", 3)
+            notify("TweenFarm Activated", "Flying smooth farming enabled with M1 clicking (No Skills)", 3)
         else
             -- Toggle turned off - cleanup
             _G.TweenFarmEnabled = false
@@ -731,7 +713,6 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
         end
     end
 })
-
 
 local TeleportFarmToggle = Tabs.Features:AddToggle("TeleportFarm", {
     Title = "Teleport Farm",
@@ -770,7 +751,6 @@ local TeleportFarmToggle = Tabs.Features:AddToggle("TeleportFarm", {
             
             -- Tracking variables
             local currentTargetTitan = nil
-            local lastSkillUseTime = 0
             local currentTween = nil
             
             -- Function to check if titans exist
@@ -940,22 +920,7 @@ local TeleportFarmToggle = Tabs.Features:AddToggle("TeleportFarm", {
                     stopAutoClick()
                 end
                 
-                -- Use skills periodically
-                local currentTime = tick()
-                if not lastSkillUseTime or currentTime - lastSkillUseTime > 5 then
-                    -- Use skills in sequence
-                    VIM:SendKeyEvent(true, Enum.KeyCode.One, false, game)
-                    task.wait(0.05)
-                    VIM:SendKeyEvent(false, Enum.KeyCode.One, false, game)
-                    
-                    task.wait(0.3)
-                    
-                    VIM:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
-                    task.wait(0.05)
-                    VIM:SendKeyEvent(false, Enum.KeyCode.Two, false, game)
-                    
-                    lastSkillUseTime = currentTime
-                end
+                -- Skills usage code removed
             end)
             
             -- Replace the old clicking system with the new simple auto-clicker
@@ -982,62 +947,62 @@ local TeleportFarmToggle = Tabs.Features:AddToggle("TeleportFarm", {
             end)
             
            -- Monitor for mission completion with adjustable click position
-local function checkMissionCompletion()
-    -- Adjustable values - you can change these
-    local waitTimeAfterCompletion = 2.5  -- Time to wait after mission completes
-    local clickOffsetX = 50  -- X offset from center of button (adjust if needed)
-    local clickOffsetY = 60  -- Y offset from center of button (adjust if needed)
-    
-    while Options.TeleportFarm.Value do
-        local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
-        
-        if Slay then
-            local value = Slay.Value
-            local requirement = Slay:GetAttribute("Requirement")
-            
-            if value and requirement and value >= requirement then
-                Fluent:Notify({
-                    Title = "Mission Complete!",
-                    Content = "Detected completion. Waiting for UI...",
-                    Duration = 3
-                })
+            local function checkMissionCompletion()
+                -- Adjustable values - you can change these
+                local waitTimeAfterCompletion = 2.5  -- Time to wait after mission completes
+                local clickOffsetX = 50  -- X offset from center of button (adjust if needed)
+                local clickOffsetY = 60  -- Y offset from center of button (adjust if needed)
                 
-                -- Wait for rewards UI
-                task.wait(waitTimeAfterCompletion)
-                
-                -- Find the retry button path
-                local retryButton = game:GetService("Players").LocalPlayer.PlayerGui.Interface.Rewards.Main.Info.Main.Buttons.Retry
-                
-                if retryButton then
-                    -- Get the position of the button
-                    local buttonPos = retryButton.AbsolutePosition
-                    local buttonSize = retryButton.AbsoluteSize
+                while Options.TeleportFarm.Value do
+                    local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
                     
-                    -- Calculate click position with adjustable offsets
-                    local clickX = buttonPos.X + (buttonSize.X / 2) + clickOffsetX
-                    local clickY = buttonPos.Y + (buttonSize.Y / 2) + clickOffsetY
+                    if Slay then
+                        local value = Slay.Value
+                        local requirement = Slay:GetAttribute("Requirement")
+                        
+                        if value and requirement and value >= requirement then
+                            Fluent:Notify({
+                                Title = "Mission Complete!",
+                                Content = "Detected completion. Waiting for UI...",
+                                Duration = 3
+                            })
+                            
+                            -- Wait for rewards UI
+                            task.wait(waitTimeAfterCompletion)
+                            
+                            -- Find the retry button path
+                            local retryButton = game:GetService("Players").LocalPlayer.PlayerGui.Interface.Rewards.Main.Info.Main.Buttons.Retry
+                            
+                            if retryButton then
+                                -- Get the position of the button
+                                local buttonPos = retryButton.AbsolutePosition
+                                local buttonSize = retryButton.AbsoluteSize
+                                
+                                -- Calculate click position with adjustable offsets
+                                local clickX = buttonPos.X + (buttonSize.X / 2) + clickOffsetX
+                                local clickY = buttonPos.Y + (buttonSize.Y / 2) + clickOffsetY
+                                
+                                
+                                -- Simulate a mouse click
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
+                                task.wait(0.1)
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
+                            else
+                                Fluent:Notify({
+                                    Title = "Button Not Found",
+                                    Content = "",
+                                    Duration = 3
+                                })
+                            end
+                        end
+                    end
                     
-                    
-                    -- Simulate a mouse click
-                    VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
-                    task.wait(0.1)
-                    VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
-                else
-                    Fluent:Notify({
-                        Title = "Button Not Found",
-                        Content = "",
-                        Duration = 3
-                    })
+                    task.wait(1)  -- Check mission status every second
                 end
             end
-        end
-        
-        task.wait(1)  -- Check mission status every second
-    end
-end
 
--- Start mission completion checking
-task.spawn(checkMissionCompletion)
+            -- Start mission completion checking
+            task.spawn(checkMissionCompletion)
             
             -- Handle new titans
             local childAddedConnection = nil
@@ -1067,7 +1032,7 @@ task.spawn(checkMissionCompletion)
             
             -- Initial notification
             Fluent:Notify({
-                Title = "Teleport Autofarm Activated",
+                Title = "Teleport Autofarm Activated (No Skills)",
                 Content = "",
                 Duration = 3
             })
@@ -1075,7 +1040,6 @@ task.spawn(checkMissionCompletion)
     end
 })
 
--- Add Blade Refill Toggle to Features Tab
 -- Add Blade Refill Toggle to Features Tab
 local BladeRefillToggle = Tabs.Features:AddToggle("BladeRefill", {
     Title = "Auto Blade Refill",
