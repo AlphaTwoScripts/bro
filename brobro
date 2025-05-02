@@ -328,162 +328,170 @@ else
     })
 end
 
+
 local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
     Title = "Tween Farm",
     Default = false,
     Description = "",
     Callback = function(Value)
-        _G.TweenFarmEnabled = Value -- Global variable to track state
-        
+        _G.TweenFarmEnabled = Value
+
         if Value then
-           -- TweenFarm Script (Edited for Smooth Takeoff and Aerial Kill)
+            local Players = game:GetService("Players")
+            local workspace = game:GetService("Workspace")
+            local VIM = game:GetService("VirtualInputManager")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local RunService = game:GetService("RunService")
+            local TweenService = game:GetService("TweenService")
 
--- Services
-local Players = game:GetService("Players")
-local workspace = game:GetService("Workspace")
-local VIM = game:GetService("VirtualInputManager")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
+            local player = Players.LocalPlayer
+            local character = player.Character or player.CharacterAdded:Wait()
+            local rootPart = character:WaitForChild("HumanoidRootPart")
+            local humanoid = character:WaitForChild("Humanoid")
 
-local player = Players.LocalPlayer
-local character = player.Character or player.CharacterAdded:Wait()
-local rootPart = character:WaitForChild("HumanoidRootPart")
-local humanoid = character:WaitForChild("Humanoid")
+            local config = {
+                flySpeed = 450,
+                attackRange = 20,
+                clickInterval = 0.05,
+                targetCooldown = 3,
+                healThreshold = 0.4,
+                inactivityTimeout = 8,
+                fixedFlyHeight = 120,
+                heightAboveTitan = 50,
+                waitTimeAfterCompletion = 2.5,
+                clickOffsetX = 50,
+                clickOffsetY = 60
+            }
 
-local config = {
-    flySpeed = 450,
-    attackRange = 20,
-    clickInterval = 0.05,
-    targetCooldown = 3,
-    healThreshold = 0.4,
-    inactivityTimeout = 8,
-    fixedFlyHeight = 120,
-    heightAboveTitan = 50,
-    waitTimeAfterCompletion = 2.5,
-    clickOffsetX = 50,
-    clickOffsetY = 60
-}
+            local farm = {
+                state = "IDLE",
+                titan = nil,
+                tween = nil,
+                lastAttack = 0,
+                lastTargetChange = 0,
+                lastActivity = tick(),
+                connections = {}
+            }
 
-local farm = {
-    state = "IDLE",
-    titan = nil,
-    tween = nil,
-    lastAttack = 0,
-    lastTargetChange = 0,
-    lastActivity = tick(),
-    connections = {}
-}
-
-local function notify(title, msg)
-    print("[Notify] " .. title .. ": " .. msg)
-end
-
-local function enableNoClip()
-    local con = RunService.Stepped:Connect(function()
-        for _, part in pairs(character:GetDescendants()) do
-            if part:IsA("BasePart") then
-                part.CanCollide = false
+            local function notify(title, msg)
+                print("[Notify] " .. title .. ": " .. msg)
             end
-        end
-    end)
-    table.insert(farm.connections, con)
-end
 
-local function maintainHeight()
-    local con = RunService.Heartbeat:Connect(function()
-        if rootPart then
-            local y = math.max(rootPart.Position.Y, config.fixedFlyHeight)
-            rootPart.CFrame = CFrame.new(rootPart.Position.X, y, rootPart.Position.Z) * rootPart.CFrame.Rotation
-        end
-    end)
-    table.insert(farm.connections, con)
-end
+            local function enableNoClip()
+                local con = RunService.Stepped:Connect(function()
+                    for _, part in pairs(character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = false
+                        end
+                    end
+                end)
+                table.insert(farm.connections, con)
+            end
 
-local function initialTakeoff()
-    local targetY = rootPart.Position.Y + 100
-    local cf = CFrame.new(rootPart.Position.X, targetY, rootPart.Position.Z) * rootPart.CFrame.Rotation
-    local info = TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-    local tween = TweenService:Create(rootPart, info, {CFrame = cf})
-    tween:Play()
-    tween.Completed:Wait()
-end
+            local function maintainHeight()
+                local con = RunService.Heartbeat:Connect(function()
+                    if rootPart then
+                        local y = math.max(rootPart.Position.Y, config.fixedFlyHeight)
+                        rootPart.CFrame = CFrame.new(rootPart.Position.X, y, rootPart.Position.Z) * rootPart.CFrame.Rotation
+                    end
+                end)
+                table.insert(farm.connections, con)
+            end
 
-local function getFlyPosition(titan)
-    if not titan or not titan:FindFirstChild("Head") then return nil end
-    local head = titan.Head.Position
-    local titanHeight = (titan:FindFirstChild("HumanoidRootPart") and titan.HumanoidRootPart.Size.Y * 1.5) or 15
-    local targetY = math.max(head.Y + titanHeight + 15, config.fixedFlyHeight)
-    return Vector3.new(head.X, targetY, head.Z)
-end
+            local function initialTakeoff()
+                local targetY = rootPart.Position.Y + 100
+                local cf = CFrame.new(rootPart.Position.X, targetY, rootPart.Position.Z) * rootPart.CFrame.Rotation
+                local info = TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                local tween = TweenService:Create(rootPart, info, {CFrame = cf})
+                tween:Play()
+                tween.Completed:Wait()
+            end
 
-local function smoothFlyTo(pos)
-    if farm.tween then farm.tween:Cancel() end
-    local dist = (rootPart.Position - pos).Magnitude
-    local duration = math.clamp(dist / config.flySpeed, 0.1, 1.5)
-    local lookVector = (pos - rootPart.Position).Unit
-    local cf = CFrame.new(pos, pos + lookVector)
-    local info = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-    farm.tween = TweenService:Create(rootPart, info, {CFrame = cf})
-    farm.tween:Play()
-    farm.state = "FLYING"
-    farm.tween.Completed:Connect(function()
-        farm.tween = nil
-        farm.state = "ATTACKING"
-        character:SetPrimaryPartCFrame(cf * CFrame.Angles(math.rad(-90), 0, 0))
-    end)
-end
+            local function getFlyPosition(titan)
+                if not titan or not titan:FindFirstChild("Head") then return nil end
+                local head = titan.Head.Position
+                local titanHeight = (titan:FindFirstChild("HumanoidRootPart") and titan.HumanoidRootPart.Size.Y * 1.5) or 15
+                local targetY = math.max(head.Y + titanHeight + 15, config.fixedFlyHeight)
+                return Vector3.new(head.X, targetY, head.Z)
+            end
 
-local function getNearestTitan()
-    local titans = workspace:FindFirstChild("Titans")
-    local closest, dist = nil, math.huge
-    if titans then
-        for _, t in pairs(titans:GetChildren()) do
-            if t:FindFirstChild("Head") and t:FindFirstChild("Humanoid") and t.Humanoid.Health > 0 then
-                local d = (t.Head.Position - rootPart.Position).Magnitude
-                if d < dist then
-                    closest = t
-                    dist = d
+            local function smoothFlyTo(pos)
+                if farm.tween then farm.tween:Cancel() end
+                local dist = (rootPart.Position - pos).Magnitude
+                local duration = math.clamp(dist / config.flySpeed, 0.1, 1.5)
+                local lookVector = (pos - rootPart.Position).Unit
+                local cf = CFrame.new(pos, pos + lookVector)
+                local info = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
+                farm.tween = TweenService:Create(rootPart, info, {CFrame = cf})
+                farm.tween:Play()
+                farm.state = "FLYING"
+                farm.tween.Completed:Connect(function()
+                    farm.tween = nil
+                    farm.state = "ATTACKING"
+                    character:SetPrimaryPartCFrame(cf * CFrame.Angles(math.rad(-90), 0, 0))
+                end)
+            end
+
+            local function getNearestTitan()
+                local titans = workspace:FindFirstChild("Titans")
+                local closest, dist = nil, math.huge
+                if titans then
+                    for _, t in pairs(titans:GetChildren()) do
+                        if t:FindFirstChild("Head") and t:FindFirstChild("Humanoid") and t.Humanoid.Health > 0 then
+                            local d = (t.Head.Position - rootPart.Position).Magnitude
+                            if d < dist then
+                                closest = t
+                                dist = d
+                            end
+                        end
+                    end
                 end
+                return closest
             end
+
+            _G.M1FarmTween = true
+
+            enableNoClip()
+            maintainHeight()
+            initialTakeoff()
+
+            task.spawn(function()
+                while _G.M1FarmTween and _G.TweenFarmEnabled do
+                    VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                    task.wait(0.05)
+                    VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                    task.wait(0.3)
+                    farm.lastAttack = tick()
+                end
+            end)
+
+            task.spawn(function()
+                while _G.TweenFarmEnabled do
+                    pcall(function()
+                        if humanoid.Health / humanoid.MaxHealth < config.healThreshold then
+                            rootPart.CFrame = CFrame.new(rootPart.Position.X, config.fixedFlyHeight + 50, rootPart.Position.Z)
+                            task.wait(1)
+                        end
+                        farm.titan = getNearestTitan()
+                        if farm.titan then
+                            local pos = getFlyPosition(farm.titan)
+                            if pos then smoothFlyTo(pos) end
+                        end
+                    end)
+                    task.wait(config.clickInterval)
+                end
+            end)
+
+            notify("TweenFarm Activated", "Smooth airborne titan farming enabled.", 3)
+
+        else
+            _G.TweenFarmEnabled = false
+            _G.M1FarmTween = false
+            notify("TweenFarm Deactivated", "Farming stopped.", 3)
         end
     end
-    return closest
-end
+})
 
-_G.TweenFarmEnabled = true
-_G.M1FarmTween = true
-
-enableNoClip()
-maintainHeight()
-initialTakeoff()
-
-task.spawn(function()
-    while _G.M1FarmTween and _G.TweenFarmEnabled do
-        VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-        task.wait(0.05)
-        VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-        task.wait(0.3)
-        farm.lastAttack = tick()
-    end
-end)
-
-task.spawn(function()
-    while _G.TweenFarmEnabled do
-        pcall(function()
-            if humanoid.Health / humanoid.MaxHealth < config.healThreshold then
-                rootPart.CFrame = CFrame.new(rootPart.Position.X, config.fixedFlyHeight + 50, rootPart.Position.Z)
-                task.wait(1)
-            end
-            farm.titan = getNearestTitan()
-            if farm.titan then
-                local pos = getFlyPosition(farm.titan)
-                if pos then smoothFlyTo(pos) end
-            end
-        end)
-        task.wait(config.clickInterval)
-    end
-end)
 
 local TeleportFarmToggle = Tabs.Features:AddToggle("TeleportFarm", {
     Title = "Teleport Farm",
