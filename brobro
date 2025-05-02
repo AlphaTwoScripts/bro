@@ -328,15 +328,15 @@ else
     })
 end
 
-
 local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
-    Title = "Tween Farm",
+    Title = "Cinematic Tween Farm",
     Default = false,
-    Description = "",
+    Description = "Smooth aerial nape slicing with cinematic movements",
     Callback = function(Value)
-        _G.TweenFarmEnabled = Value
-
+        _G.TweenFarmEnabled = Value -- Global variable to track state
+        
         if Value then
+            -- Services
             local Players = game:GetService("Players")
             local workspace = game:GetService("Workspace")
             local VIM = game:GetService("VirtualInputManager")
@@ -344,44 +344,30 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
             local RunService = game:GetService("RunService")
             local TweenService = game:GetService("TweenService")
 
+            -- Player references
             local player = Players.LocalPlayer
             local character = player.Character or player.CharacterAdded:Wait()
             local rootPart = character:WaitForChild("HumanoidRootPart")
             local humanoid = character:WaitForChild("Humanoid")
 
-            -- Camera Hijack: switch to Scriptable and disable default camera scripts
-            local cam = workspace.CurrentCamera
-            cam.CameraType = Enum.CameraType.Scriptable
-            cam.CameraSubject = rootPart
-
-            local function disableDefaultCamera()
-                for _, folder in ipairs({player:WaitForChild("PlayerScripts"), player:WaitForChild("StarterPlayerScripts")}) do
-                    for _, child in ipairs(folder:GetChildren()) do
-                        if child.Name:match("Camera") and child:IsA("LocalScript") then
-                            child.Disabled = true
-                        elseif child.Name:match("Camera") and child:IsA("ModuleScript") then
-                            local ok, mod = pcall(require, child)
-                            if ok and type(mod.Disable) == "function" then
-                                mod.Disable()
-                            end
-                        end
-                    end
-                end
-            end
-            disableDefaultCamera()
-
+            -- Config
             local config = {
-                flySpeed = 450,
+                flySpeed = 350,               -- Slower for more cinematic movement
                 attackRange = 20,
                 clickInterval = 0.05,
                 targetCooldown = 3,
                 healThreshold = 0.4,
                 inactivityTimeout = 8,
-                fixedFlyHeight = 120,
-                heightAboveTitan = 50,
-                waitTimeAfterCompletion = 2.5,
-                clickOffsetX = 50,
-                clickOffsetY = 60
+                fixedFlyHeight = 120,         -- Minimum flying height
+                heightAboveTitan = 25,        -- How far above titan to fly
+                initialAscendHeight = 150,    -- Height for initial ascend animation
+                circleTitanDistance = 30,     -- Distance to circle around titan
+                circleSpeed = 0.5,            -- Speed of circling animation
+                napeAttackDistance = 10,      -- How close to get to the nape
+                napeAttackDuration = 1.2,     -- How long to attack nape
+                waitTimeAfterCompletion = 2.5,-- Time to wait after mission completes
+                clickOffsetX = 50,            -- X offset from center of button
+                clickOffsetY = 60             -- Y offset from center of button
             }
 
             local farm = {
@@ -391,124 +377,672 @@ local TweenAutofarmToggle = Tabs.Features:AddToggle("TweenAutofarm", {
                 lastAttack = 0,
                 lastTargetChange = 0,
                 lastActivity = tick(),
-                connections = {}
+                connections = {},             -- Store connections for cleanup
+                attacking = false,            -- Flag to indicate if currently attacking
+                circlingPhase = 0,            -- Phase for circling animation
+                initialAscendComplete = false -- Flag for initial ascend animation
             }
 
-            local function notify(title, msg)
-                print("[Notify] " .. title .. ": " .. msg)
+            -- Notify Helper
+            local function notify(title, message, duration)
+                Fluent:Notify({ Title = title, Content = message, Duration = duration or 3 })
             end
 
-            local function enableNoClip()
-                local con = RunService.Stepped:Connect(function()
-                    for _, part in pairs(character:GetDescendants()) do
-                        if part:IsA("BasePart") then
-                            part.CanCollide = false
-                        end
-                    end
-                end)
-                table.insert(farm.connections, con)
-            end
-
-            local function maintainHeight()
-                local con = RunService.Heartbeat:Connect(function()
-                    if rootPart then
-                        local y = math.max(rootPart.Position.Y, config.fixedFlyHeight)
-                        rootPart.CFrame = CFrame.new(rootPart.Position.X, y, rootPart.Position.Z) * rootPart.CFrame.Rotation
-                    end
-                end)
-                table.insert(farm.connections, con)
-            end
-
-            local function initialTakeoff()
-                local targetY = rootPart.Position.Y + 100
-                local cf = CFrame.new(rootPart.Position.X, targetY, rootPart.Position.Z) * rootPart.CFrame.Rotation
-                local info = TweenInfo.new(1.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
-                local tween = TweenService:Create(rootPart, info, {CFrame = cf})
-                tween:Play()
-                tween.Completed:Wait()
-            end
-
-            local function getFlyPosition(titan)
-                if not titan or not titan:FindFirstChild("Head") then return nil end
-                local head = titan.Head.Position
-                local titanHeight = (titan:FindFirstChild("HumanoidRootPart") and titan.HumanoidRootPart.Size.Y * 1.5) or 15
-                local targetY = math.max(head.Y + titanHeight + 15, config.fixedFlyHeight)
-                return Vector3.new(head.X, targetY, head.Z)
-            end
-
-            local function smoothFlyTo(pos)
-                if farm.tween then farm.tween:Cancel() end
-                local dist = (rootPart.Position - pos).Magnitude
-                local duration = math.clamp(dist / config.flySpeed, 0.1, 1.5)
-                local lookVector = (pos - rootPart.Position).Unit
-                local cf = CFrame.new(pos, pos + lookVector)
-                local info = TweenInfo.new(duration, Enum.EasingStyle.Sine, Enum.EasingDirection.Out)
-                farm.tween = TweenService:Create(rootPart, info, {CFrame = cf})
-                farm.tween:Play()
-                farm.state = "FLYING"
-                farm.tween.Completed:Connect(function()
-                    farm.tween = nil
-                    farm.state = "ATTACKING"
-                    character:SetPrimaryPartCFrame(cf * CFrame.Angles(math.rad(-90), 0, 0))
-                end)
-            end
-
-            local function getNearestTitan()
-                local titans = workspace:FindFirstChild("Titans")
-                local closest, dist = nil, math.huge
-                if titans then
-                    for _, t in pairs(titans:GetChildren()) do
-                        if t:FindFirstChild("Head") and t:FindFirstChild("Humanoid") and t.Humanoid.Health > 0 then
-                            local d = (t.Head.Position - rootPart.Position).Magnitude
-                            if d < dist then
-                                closest = t
-                                dist = d
+            -- Hitbox optimization
+            local function optimizeHitboxes()
+                local titansFolder = workspace:FindFirstChild("Titans")
+                if not titansFolder then return end
+                for _, titan in pairs(titansFolder:GetChildren()) do
+                    local hitboxes = titan:FindFirstChild("Hitboxes")
+                    if hitboxes then
+                        local hit = hitboxes:FindFirstChild("Hit")
+                        if hit then
+                            local nape = hit:FindFirstChild("Nape")
+                            if nape then
+                                nape.Size = Vector3.new(30, 100, 25)
+                                local titanHead = titan:FindFirstChild("Head")
+                                if titanHead then
+                                    nape.Position = titanHead.Position + Vector3.new(0, -2, 0)
+                                end
                             end
                         end
                     end
                 end
-                return closest
             end
 
-            _G.M1FarmTween = true
-
-            enableNoClip()
-            maintainHeight()
-            initialTakeoff()
-
-            task.spawn(function()
-                while _G.M1FarmTween and _G.TweenFarmEnabled do
-                    VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-                    task.wait(0.05)
-                    VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
-                    task.wait(0.3)
-                    farm.lastAttack = tick()
-                end
-            end)
-
-            task.spawn(function()
-                while _G.TweenFarmEnabled do
-                    pcall(function()
-                        if humanoid.Health / humanoid.MaxHealth < config.healThreshold then
-                            rootPart.CFrame = CFrame.new(rootPart.Position.X, config.fixedFlyHeight + 50, rootPart.Position.Z)
-                            task.wait(1)
+            -- Optimize new titan when it spawns
+            local function optimizeNewTitan(titan)
+                task.wait(0.5)
+                local hitboxes = titan:FindFirstChild("Hitboxes")
+                if hitboxes then
+                    local hit = hitboxes:FindFirstChild("Hit")
+                    if hit then
+                        local nape = hit:FindFirstChild("Nape")
+                        if nape then
+                            nape.Size = Vector3.new(30, 100, 25)
+                            local titanHead = titan:FindFirstChild("Head")
+                            if titanHead then
+                                nape.Position = titanHead.Position + Vector3.new(0, -2, 0)
+                            end
                         end
-                        farm.titan = getNearestTitan()
-                        if farm.titan then
-                            local pos = getFlyPosition(farm.titan)
-                            if pos then smoothFlyTo(pos) end
+                    end
+                end
+            end
+
+            -- Create beautiful flying particles effect
+            local function createFlyingEffects()
+                local attachment = Instance.new("Attachment")
+                attachment.Parent = rootPart
+                
+                local trailEffect = Instance.new("Trail")
+                trailEffect.Attachment0 = attachment
+                trailEffect.Parent = rootPart
+                
+                -- Create a second attachment for the trail
+                local attachment2 = Instance.new("Attachment")
+                attachment2.Position = Vector3.new(0, -3, 0)
+                attachment2.Parent = rootPart
+                trailEffect.Attachment1 = attachment2
+                
+                -- Configure trail properties
+                trailEffect.Color = ColorSequence.new(Color3.fromRGB(255, 255, 255))
+                trailEffect.Transparency = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 0.5),
+                    NumberSequenceKeypoint.new(1, 1)
+                })
+                trailEffect.Lifetime = 0.5
+                trailEffect.MinLength = 0.1
+                trailEffect.WidthScale = NumberSequence.new({
+                    NumberSequenceKeypoint.new(0, 1),
+                    NumberSequenceKeypoint.new(1, 0)
+                })
+                
+                -- Save reference for cleanup
+                farm.trailEffect = trailEffect
+                farm.attachments = {attachment, attachment2}
+                
+                return trailEffect
+            end
+
+            -- NoClip function to prevent collisions with ground or obstacles
+            local function enableNoClip()
+                local noClipConnection = RunService.Stepped:Connect(function()
+                    if character and character:FindFirstChild("Humanoid") then
+                        for _, part in pairs(character:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
+                            end
+                        end
+                    end
+                end)
+                
+                table.insert(farm.connections, noClipConnection)
+                return noClipConnection
+            end
+
+            -- Force height maintenance to prevent going underground
+            local function maintainHeight()
+                local heightConnection = RunService.Heartbeat:Connect(function()
+                    if rootPart and _G.TweenFarmEnabled then
+                        -- Only adjust height if we're not currently tweening
+                        if not farm.tween or farm.tween.PlaybackState ~= Enum.PlaybackState.Playing then
+                            local currentPos = rootPart.Position
+                            
+                            -- Get minimum height from ground and any nearby titans
+                            local minHeight = config.fixedFlyHeight
+                            local titansFolder = workspace:FindFirstChild("Titans")
+                            if titansFolder then
+                                for _, titan in pairs(titansFolder:GetChildren()) do
+                                    if titan:FindFirstChild("Head") and 
+                                       titan:FindFirstChild("Humanoid") and 
+                                       titan.Humanoid.Health > 0 then
+                                       
+                                        local dist = (Vector3.new(titan.Head.Position.X, 0, titan.Head.Position.Z) - 
+                                                     Vector3.new(currentPos.X, 0, currentPos.Z)).Magnitude
+                                        
+                                        -- If we're close to this titan, calculate height above it
+                                        if dist < 100 then
+                                            local titanHeight = titan.Head.Position.Y + config.heightAboveTitan
+                                            minHeight = math.max(minHeight, titanHeight)
+                                        end
+                                    end
+                                end
+                            end
+                            
+                            -- Only adjust if we're not at the correct height already (with small tolerance)
+                            if currentPos.Y < minHeight - 5 then
+                                rootPart.CFrame = CFrame.new(
+                                    currentPos.X, 
+                                    minHeight, 
+                                    currentPos.Z
+                                ) * rootPart.CFrame.Rotation
+                            end
+                        end
+                    end
+                end)
+                
+                table.insert(farm.connections, heightConnection)
+                return heightConnection
+            end
+
+            -- Get nape position of titan
+            local function getNapePosition(titan)
+                if not titan then return nil end
+                
+                local hitboxes = titan:FindFirstChild("Hitboxes")
+                if not hitboxes then return titan.Head.Position - Vector3.new(0, 2, 0) end
+                
+                local hit = hitboxes:FindFirstChild("Hit")
+                if not hit then return titan.Head.Position - Vector3.new(0, 2, 0) end
+                
+                local nape = hit:FindFirstChild("Nape")
+                if not nape then return titan.Head.Position - Vector3.new(0, 2, 0) end
+                
+                return nape.Position
+            end
+
+            -- CINEMATIC INITIAL ASCEND ANIMATION
+            local function performInitialAscend()
+                if farm.initialAscendComplete then return true end
+                
+                -- Save current position
+                local startPos = rootPart.Position
+                
+                -- Target position high in the air
+                local targetPos = Vector3.new(
+                    startPos.X,
+                    config.initialAscendHeight,
+                    startPos.Z
+                )
+                
+                -- Create smooth, cinematic tween for initial ascent
+                local tweenInfo = TweenInfo.new(
+                    2.5,  -- Duration
+                    Enum.EasingStyle.Quad,
+                    Enum.EasingDirection.Out
+                )
+                
+                if farm.tween then 
+                    farm.tween:Cancel() 
+                end
+                
+                farm.tween = TweenService:Create(rootPart, tweenInfo, {
+                    CFrame = CFrame.new(targetPos) * rootPart.CFrame.Rotation
+                })
+                
+                farm.state = "ASCENDING"
+                notify("Cinematic Ascend", "Taking flight...", 2)
+                
+                -- Create trail effect for ascent
+                createFlyingEffects()
+                
+                farm.tween:Play()
+                
+                local completed = false
+                farm.tween.Completed:Connect(function()
+                    completed = true
+                    farm.tween = nil
+                    farm.initialAscendComplete = true
+                    farm.state = "SEARCHING"
+                    
+                    -- Subtle hover effect after ascent
+                    task.spawn(function()
+                        while _G.TweenFarmEnabled and farm.initialAscendComplete do
+                            if farm.state == "SEARCHING" or farm.state == "IDLE" then
+                                local currentPos = rootPart.Position
+                                local hoverPos = Vector3.new(
+                                    currentPos.X + math.sin(tick() * 0.5) * 2,
+                                    currentPos.Y + math.sin(tick() * 0.7) * 1.5,
+                                    currentPos.Z + math.cos(tick() * 0.5) * 2
+                                )
+                                
+                                local hoverTween = TweenService:Create(rootPart, 
+                                    TweenInfo.new(2, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+                                    {CFrame = CFrame.new(hoverPos) * rootPart.CFrame.Rotation}
+                                )
+                                hoverTween:Play()
+                                task.wait(2)
+                            else
+                                task.wait(0.5)
+                            end
                         end
                     end)
-                    task.wait(config.clickInterval)
+                end)
+                
+                -- Wait for ascend to complete
+                while not completed and _G.TweenFarmEnabled do
+                    task.wait()
                 end
+                
+                return completed
+            end
+
+            -- CINEMATIC CIRCLE AROUND TITAN
+            local function circleAroundTitan(titan)
+                if not titan or not titan:FindFirstChild("Head") then return false end
+                
+                farm.state = "CIRCLING"
+                local head = titan.Head.Position
+                local napePos = getNapePosition(titan)
+                
+                -- Calculate center position for circling
+                local centerPos = Vector3.new(head.X, head.Y + config.heightAboveTitan, head.Z)
+                
+                -- Perform circular motion around the titan
+                for i = 1, 6 do  -- 6 waypoints to complete a circle
+                    if not _G.TweenFarmEnabled or not titan.Parent or titan.Humanoid.Health <= 0 then
+                        return false
+                    end
+                    
+                    local angle = (i / 6) * math.pi * 2
+                    local offsetX = math.sin(angle) * config.circleTitanDistance
+                    local offsetZ = math.cos(angle) * config.circleTitanDistance
+                    
+                    local targetPos = Vector3.new(
+                        centerPos.X + offsetX,
+                        centerPos.Y + math.sin(angle * 2) * 5,  -- Small vertical oscillation
+                        centerPos.Z + offsetZ
+                    )
+                    
+                    -- Calculate direction to make character face the titan
+                    local lookDirection = (centerPos - targetPos).Unit
+                    local lookCFrame = CFrame.new(targetPos, centerPos)
+                    
+                    -- Create smooth tween for circling
+                    local tweenInfo = TweenInfo.new(
+                        config.circleSpeed,
+                        Enum.EasingStyle.Sine,
+                        Enum.EasingDirection.InOut
+                    )
+                    
+                    if farm.tween then 
+                        farm.tween:Cancel() 
+                    end
+                    
+                    farm.tween = TweenService:Create(rootPart, tweenInfo, {
+                        CFrame = lookCFrame
+                    })
+                    
+                    farm.tween:Play()
+                    
+                    local completed = false
+                    farm.tween.Completed:Connect(function()
+                        completed = true
+                        farm.tween = nil
+                    end)
+                    
+                    -- Wait for this segment to complete
+                    while not completed and _G.TweenFarmEnabled and titan.Parent and titan.Humanoid.Health > 0 do
+                        task.wait()
+                    end
+                    
+                    if not _G.TweenFarmEnabled or not titan.Parent or titan.Humanoid.Health <= 0 then
+                        return false
+                    end
+                end
+                
+                return true
+            end
+
+            -- CINEMATIC DIVING ATTACK ANIMATION
+            local function performNapeAttack(titan)
+                if not titan or not titan:FindFirstChild("Head") then return false end
+                
+                farm.state = "DIVING"
+                local napePos = getNapePosition(titan)
+                
+                -- Position slightly above the titan for diving
+                local startPos = Vector3.new(
+                    napePos.X,
+                    napePos.Y + config.heightAboveTitan,
+                    napePos.Z
+                )
+                
+                -- Position close to the nape for attack
+                local attackPos = Vector3.new(
+                    napePos.X,
+                    napePos.Y + 5,  -- Slightly above nape
+                    napePos.Z - 2   -- Slightly behind nape
+                )
+                
+                -- Create smooth diving animation
+                local tweenInfo = TweenInfo.new(
+                    1,  -- Quick dive
+                    Enum.EasingStyle.Quad,
+                    Enum.EasingDirection.In
+                )
+                
+                if farm.tween then 
+                    farm.tween:Cancel() 
+                end
+                
+                -- Look at nape during dive
+                local diveLookCFrame = CFrame.new(startPos, napePos)
+                rootPart.CFrame = diveLookCFrame
+                
+                task.wait(0.2)  -- Brief pause before dive
+                
+                farm.tween = TweenService:Create(rootPart, tweenInfo, {
+                    CFrame = CFrame.new(attackPos) * CFrame.Angles(math.rad(-45), 0, 0)  -- Diving angle
+                })
+                
+                farm.tween:Play()
+                
+                -- Start attacking during the dive
+                farm.attacking = true
+                
+                local completed = false
+                farm.tween.Completed:Connect(function()
+                    completed = true
+                    farm.tween = nil
+                    
+                    -- Stay in attack position briefly
+                    farm.state = "ATTACKING"
+                    
+                    -- Simulate rapid slashing
+                    for i = 1, 5 do
+                        if not _G.TweenFarmEnabled or not titan.Parent or titan.Humanoid.Health <= 0 then
+                            farm.attacking = false
+                            return
+                        end
+                        
+                        -- Rapid slashing motion - slight position changes
+                        local slashOffset = Vector3.new(
+                            math.random(-2, 2),
+                            math.random(-1, 1),
+                            math.random(-2, 2)
+                        )
+                        
+                        local slashPos = attackPos + slashOffset
+                        local slashTween = TweenService:Create(rootPart, 
+                            TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                            {CFrame = CFrame.new(slashPos) * CFrame.Angles(math.rad(-35 + math.random(-10, 10)), 0, 0)}
+                        )
+                        
+                        slashTween:Play()
+                        
+                        -- Click to attack
+                        VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)  -- mouse1 press
+                        task.wait(0.05)
+                        VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0) -- mouse1 release
+                        
+                        task.wait(0.15)
+                    end
+                    
+                    farm.attacking = false
+                    
+                    -- Quick retreat after attack
+                    local retreatPos = Vector3.new(
+                        napePos.X - 15,
+                        napePos.Y + config.heightAboveTitan,
+                        napePos.Z - 15
+                    )
+                    
+                    local retreatTween = TweenService:Create(rootPart, 
+                        TweenInfo.new(0.8, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+                        {CFrame = CFrame.new(retreatPos) * CFrame.Angles(0, math.rad(180), 0)}
+                    )
+                    
+                    retreatTween:Play()
+                    farm.state = "RETREATING"
+                    
+                    task.wait(0.8)
+                end)
+                
+                -- Wait for attack to complete
+                while not completed and _G.TweenFarmEnabled and titan.Parent and titan.Humanoid.Health > 0 do
+                    task.wait()
+                end
+                
+                return true
+            end
+
+            local function smoothFlyTo(targetPos, speed, style, direction)
+                if farm.tween then 
+                    farm.tween:Cancel() 
+                    farm.tween = nil
+                end
+                
+                local distance = (rootPart.Position - targetPos).Magnitude
+                local duration = distance / (speed or config.flySpeed)
+                duration = math.clamp(duration, 0.1, 1.5)
+
+                -- Use CFrame to preserve orientation
+                local targetCFrame = CFrame.new(targetPos) * rootPart.CFrame.Rotation
+                
+                local tweenInfo = TweenInfo.new(
+                    duration, 
+                    style or Enum.EasingStyle.Sine, 
+                    direction or Enum.EasingDirection.Out
+                )
+                
+                farm.tween = TweenService:Create(rootPart, tweenInfo, {CFrame = targetCFrame})
+                farm.tween:Play()
+                farm.lastActivity = tick()
+                farm.state = "FLYING"
+
+                local completed = false
+                farm.tween.Completed:Connect(function()
+                    completed = true
+                    farm.tween = nil
+                    farm.state = "ARRIVED"
+                end)
+
+                return function()
+                    local startTime = tick()
+                    while not completed and _G.TweenFarmEnabled do
+                        -- Add timeout to prevent infinite waiting
+                        if tick() - startTime > duration * 1.5 then
+                            completed = true
+                            if farm.tween then
+                                farm.tween:Cancel()
+                                farm.tween = nil
+                            end
+                            farm.state = "TIMEOUT"
+                            break
+                        end
+                        task.wait()
+                    end
+                    return completed
+                end
+            end
+
+            -- Select best titan
+            local function getNearestTitan()
+                local best
+                local minDist = math.huge
+                local titans = workspace:FindFirstChild("Titans")
+                if titans then
+                    for _, titan in pairs(titans:GetChildren()) do
+                        if titan:FindFirstChild("Head") and 
+                           titan:FindFirstChild("Humanoid") and 
+                           titan.Humanoid.Health > 0 then
+                            local dist = (titan.Head.Position - rootPart.Position).Magnitude
+                            if dist < minDist then
+                                minDist = dist
+                                best = titan
+                            end
+                        end
+                    end
+                end
+                return best
+            end
+
+            -- Add mission completion check and auto-retry
+            local function checkMissionCompletion()
+                local missionCheckConnection = RunService.Heartbeat:Connect(function()
+                    if not _G.TweenFarmEnabled then return end
+                    
+                    local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
+                    
+                    if Slay then
+                        local value = Slay.Value
+                        local requirement = Slay:GetAttribute("Requirement")
+                        
+                        if value and requirement and value >= requirement then
+                            notify("Mission Complete!", "Detected completion. Waiting for UI...", 3)
+                            
+                            -- Wait for rewards UI
+                            task.wait(config.waitTimeAfterCompletion)
+                            
+                            -- Find the retry button path
+                            local retryButton = game:GetService("Players").LocalPlayer.PlayerGui.Interface.Rewards.Main.Info.Main.Buttons.Retry
+                            
+                            if retryButton then
+                                -- Get the position of the button
+                                local buttonPos = retryButton.AbsolutePosition
+                                local buttonSize = retryButton.AbsoluteSize
+                                
+                                -- Calculate click position with adjustable offsets
+                                local clickX = buttonPos.X + (buttonSize.X / 2) + config.clickOffsetX
+                                local clickY = buttonPos.Y + (buttonSize.Y / 2) + config.clickOffsetY
+                                
+                                -- Simulate a mouse click
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
+                                task.wait(0.1)
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
+                                
+                                notify("Restarting Mission", "Clicked retry button", 3)
+                            else
+                                notify("Button Not Found", "Could not find retry button", 3)
+                            end
+                        end
+                    end
+                    
+                    task.wait(1)  -- Check mission status every second
+                end)
+                
+                table.insert(farm.connections, missionCheckConnection)
+                return missionCheckConnection
+            end
+
+            -- Cleanup function
+            local function cleanup()
+                -- Disconnect all connections
+                for _, connection in pairs(farm.connections) do
+                    if connection and connection.Connected then
+                        connection:Disconnect()
+                    end
+                end
+                
+                -- Cancel any active tween
+                if farm.tween then
+                    farm.tween:Cancel()
+                    farm.tween = nil
+                end
+                
+                -- Clean up trail effect
+                if farm.trailEffect then
+                    farm.trailEffect:Destroy()
+                end
+                
+                -- Clean up attachments
+                if farm.attachments then
+                    for _, attachment in pairs(farm.attachments) do
+                        if attachment then
+                            attachment:Destroy()
+                        end
+                    end
+                end
+                
+                _G.M1FarmTween = false  -- Stop the auto-clicker
+                
+                farm.connections = {}
+                farm.titan = nil
+                farm.state = "IDLE"
+                farm.initialAscendComplete = false
+            end
+
+            -- Setup titan additions monitor
+            local titansFolder = workspace:FindFirstChild("Titans")
+            if titansFolder then
+                local titanAddedConnection = titansFolder.ChildAdded:Connect(optimizeNewTitan)
+                table.insert(farm.connections, titanAddedConnection)
+            end
+            
+            -- Initial setup
+            optimizeHitboxes()
+            enableNoClip()
+            maintainHeight()
+            checkMissionCompletion()  -- Start mission completion checker
+            
+            -- Main Farm Loop
+            task.spawn(function()
+                while _G.TweenFarmEnabled do
+                    pcall(function() -- Error handling
+                        if not character or not character.Parent then
+                            character = player.Character or player.CharacterAdded:Wait()
+                            rootPart = character:WaitForChild("HumanoidRootPart")
+                            humanoid = character:WaitForChild("Humanoid")
+                            
+                            -- Re-enable noclip for new character
+                            enableNoClip()
+                            
+                            -- Reset initial ascend flag
+                            farm.initialAscendComplete = false
+                        end
+                        
+                        -- Initial cinematic ascend if not done yet
+                        if not farm.initialAscendComplete then
+                            performInitialAscend()
+                            task.wait(0.5)  -- Brief pause after ascend
+                        end
+
+                        if humanoid.Health / humanoid.MaxHealth < config.healThreshold then
+                            farm.state = "HEALING"
+                            local healPos = Vector3.new(
+                                rootPart.Position.X + math.random(-20, 20),
+                                config.fixedFlyHeight + 50,
+                                rootPart.Position.Z + math.random(-20, 20)
+                            )
+                            smoothFlyTo(healPos, 200, Enum.EasingStyle.Quad)()
+                            task.wait(1.5)
+                        end
+
+                        if not farm.titan or 
+                           not farm.titan.Parent or 
+                           not farm.titan:FindFirstChild("Humanoid") or 
+                           farm.titan.Humanoid.Health <= 0 or
+                           tick() - farm.lastTargetChange > 15 then  -- Switch targets periodically
+                            
+                            farm.titan = getNearestTitan()
+                            farm.state = farm.titan and "TARGETING" or "SEARCHING"
+                            farm.lastTargetChange = tick()
+                            
+                            if farm.titan then
+                                notify("Target Acquired", "Engaging " .. farm.titan.Name, 1.5)
+                            end
+                        end
+
+                        if farm.titan and not farm.attacking then
+                            -- First circle around the titan for cinematic effect
+                            circleAroundTitan(farm.titan)
+                            
+                            -- Then perform diving attack on the nape
+                            if _G.TweenFarmEnabled and farm.titan and farm.titan.Parent and farm.titan.Humanoid.Health > 0 then
+                                performNapeAttack(farm.titan)
+                            end
+                            
+                            -- Brief pause between attacks for more natural flow
+                            task.wait(0.5)
+                        else
+                            -- If no titan, do cinematic hovering (already handled in performInitialAscend)
+                            task.wait(0.5)
+                        end
+                    end)
+                    
+                    task.wait(0.1)
+                end
+                
+                cleanup()
             end)
 
-            notify("TweenFarm Activated", "Smooth airborne titan farming enabled with camera locked.", 3)
-
+            notify("Cinematic TweenFarm", "Aerial combat sequence activated", 3)
         else
+            -- Toggle turned off - cleanup
             _G.TweenFarmEnabled = false
             _G.M1FarmTween = false
-            notify("TweenFarm Deactivated", "Farming stopped.", 3)
+            notify("TweenFarm Deactivated", "Flying farming stopped", 3)
         end
     end
 })
