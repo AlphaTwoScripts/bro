@@ -245,7 +245,7 @@ local AutoEscapeToggle = Tabs.Features:AddToggle("AutoEscapeEnabled", {
         _G.AutoEscapeEnabled = Value
         if Value then
             -- Create a new connection when enabled
-            _G.AutoEscapeConnection = RunService.Heartbeat:Connect(function()
+            _G.AutoEscapeConnection = game:GetService("RunService").Heartbeat:Connect(function()
                 if not _G.AutoEscapeEnabled then return end
                 
                 local player = game:GetService("Players").LocalPlayer
@@ -254,25 +254,84 @@ local AutoEscapeToggle = Tabs.Features:AddToggle("AutoEscapeEnabled", {
                 
                 if interface then
                     local notifyInteract = interface:FindFirstChild("Notify")
+                    
+                    -- Check if player needs to escape (notification is visible)
                     if notifyInteract and notifyInteract:FindFirstChild("Interact") and notifyInteract.Interact.Visible then
                         local buttonsGui = interface:FindFirstChild("Buttons")
+                        
                         if buttonsGui then
-                            for _, button in ipairs(buttonsGui:GetChildren()) do
-                                if button:IsA("CanvasGroup") and button:FindFirstChild("Interact") then
-                                    local keyName = button.Name
-                                    -- PC: Simulate keyboard key press
-                                    VirtualInputManager:SendKeyEvent(true, keyName, false, game)
-                                    task.wait(0.05)
-                                    VirtualInputManager:SendKeyEvent(false, keyName, false, game)
-                                    
-                                    -- Mobile: Simulate button press (if applicable)
-                                    if button.Interact:IsA("ImageButton") or button.Interact:IsA("TextButton") then
+                            -- First, try to find and trigger the mobile touch buttons
+                            local mobileButtonFound = false
+                            
+                            -- Look for mobile-specific UI elements
+                            local mobileUI = interface:FindFirstChild("MobileButtons") or interface:FindFirstChild("TouchButtons") or buttonsGui
+                            
+                            if mobileUI then
+                                for _, obj in ipairs(mobileUI:GetDescendants()) do
+                                    if (obj:IsA("ImageButton") or obj:IsA("TextButton")) and obj.Visible then
+                                        -- Try to directly fire the button's events
                                         pcall(function()
-                                            button.Interact:Activate() -- simulate tap
+                                            -- Fire all possible events to ensure it works
+                                            firesignal(obj.MouseButton1Click)
+                                            firesignal(obj.MouseButton1Down)
+                                            firesignal(obj.Activated)
+                                            obj:Activate()
+                                            mobileButtonFound = true
                                         end)
                                     end
                                 end
                             end
+                            
+                            -- If no mobile buttons were found/activated, fall back to keyboard simulation
+                            if not mobileButtonFound then
+                                for _, button in ipairs(buttonsGui:GetChildren()) do
+                                    if button:IsA("CanvasGroup") and button:FindFirstChild("Interact") then
+                                        local keyName = button.Name
+                                        
+                                        -- Try various methods to send input
+                                        -- 1. Virtual Input Manager
+                                        pcall(function()
+                                            game:GetService("VirtualInputManager"):SendKeyEvent(true, keyName, false, game)
+                                            task.wait(0.05)
+                                            game:GetService("VirtualInputManager"):SendKeyEvent(false, keyName, false, game)
+                                        end)
+                                        
+                                        -- 2. Try to directly fire the UI events
+                                        pcall(function()
+                                            firesignal(button.Interact.MouseButton1Click)
+                                            firesignal(button.Interact.MouseButton1Down)
+                                            firesignal(button.Interact.Activated)
+                                        end)
+                                        
+                                        -- 3. For mobile touch simulation
+                                        pcall(function()
+                                            button.Interact:Activate()
+                                        end)
+                                    end
+                                end
+                            end
+                            
+                            -- Additional mobile-specific attempt - simulate screen tap
+                            pcall(function()
+                                local centerX = workspace.CurrentCamera.ViewportSize.X / 2
+                                local centerY = workspace.CurrentCamera.ViewportSize.Y / 2
+                                
+                                game:GetService("VirtualInputManager"):SendTouchEvent(
+                                    0, -- touchId (0 = first finger)
+                                    true, -- isPressing
+                                    centerX, 
+                                    centerY, 
+                                    0 -- gameProcessedEvent
+                                )
+                                task.wait(0.05)
+                                game:GetService("VirtualInputManager"):SendTouchEvent(
+                                    0, -- touchId
+                                    false, -- isPressing
+                                    centerX, 
+                                    centerY, 
+                                    0 -- gameProcessedEvent
+                                )
+                            end)
                         end
                     end
                 end
