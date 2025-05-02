@@ -36,12 +36,24 @@ end
 local function swoopAndSmoothHover(hrp, nape)
     -- 1) Fly straight up (anchored)
     hrp.Anchored = true
-    local upCFrame = CFrame.new(hrp.Position + Vector3.new(0, Options.TweenHeights.Up, 0))
-    TweenService:Create(hrp, TweenInfo.new(Options.TweenTimes.Up, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), { CFrame = upCFrame }):Play():Completed:Wait()
+    local upTarget = hrp.Position + Vector3.new(0, Options.TweenHeights.Up, 0)
+    local upTween = TweenService:Create(
+        hrp,
+        TweenInfo.new(Options.TweenTimes.Up, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+        { CFrame = CFrame.new(upTarget) }
+    )
+    upTween:Play()
+    upTween.Completed:Wait()
 
     -- 2) Fly across while staying high
-    local acrossCFrame = CFrame.new(nape.Position + Vector3.new(0, Options.TweenHeights.Up, 0))
-    TweenService:Create(hrp, TweenInfo.new(Options.TweenTimes.Across, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut), { CFrame = acrossCFrame }):Play():Completed:Wait()
+    local acrossTarget = nape.Position + Vector3.new(0, Options.TweenHeights.Up, 0)
+    local acrossTween = TweenService:Create(
+        hrp,
+        TweenInfo.new(Options.TweenTimes.Across, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut),
+        { CFrame = CFrame.new(acrossTarget) }
+    )
+    acrossTween:Play()
+    acrossTween.Completed:Wait()
 
     -- 3) Smooth hover above target
     local hoverPos = nape.Position + Vector3.new(0, Options.TweenHeights.Hover, 0)
