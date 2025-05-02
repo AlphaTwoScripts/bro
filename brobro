@@ -1,0 +1,362 @@
+-- Load Fluent UI Library
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+-- Create Main Window
+local Window = Fluent:CreateWindow({
+    Title = "Family Auto Roller",
+    SubTitle = "by YourName",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+-- Create Tabs
+local Tabs = {
+    Roll = Window:AddTab({ Title = "Roll", Icon = "refresh-cw" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+-- Create Options reference
+local Options = Fluent.Options
+
+-- Remote reference
+local GET = game:GetService("ReplicatedStorage")
+               :WaitForChild("Assets")
+               :WaitForChild("Remotes")
+               :WaitForChild("GET")
+
+-- Family Rankings Database
+local familyRanks = {
+    -- Common
+    ["RAL"] = "Common",
+    ["REEVES"] = "Common",
+    ["PIKALE"] = "Common",
+    ["MUNSELL"] = "Common",
+    ["INOCENIO"] = "Common",
+    ["IGLEHAUT"] = "Common",
+    ["HUME"] = "Common",
+    ["BLOUSE"] = "Common",
+    ["BOZADO"] = "Common",
+    ["BOYEGA"] = "Common",
+
+    -- Rare
+    ["SMITH"] = "Rare",
+    ["SPRINGER"] = "Rare",
+    ["KIRSTEIN"] = "Rare",
+    ["GRICE"] = "Rare",
+    ["AZUMABITO"] = "Rare",
+    ["BRAUS"] = "Rare",
+    ["KRUGER"] = "Rare",
+
+    -- Epic
+    ["TYBUR"] = "Epic",
+    ["LEONHART"] = "Epic",
+    ["GALLIARD"] = "Epic",
+    ["FINGER"] = "Epic",
+    ["BRAUN"] = "Epic",
+    ["ARLERT"] = "Epic",
+    ["KSAVER"] = "Epic",
+    ["ZOE"] = "Epic",
+
+    -- Legendary
+    ["YEAGER"] = "Legendary",
+    ["REISS"] = "Legendary",
+    ["ACKERMAN"] = "Legendary",
+
+    -- Secret
+    ["SHIKI"] = "Secret",
+    ["FRITZ"] = "Secret",
+    ["HELOS"] = "Secret"
+}
+
+-- Default target families (using table for faster lookups)
+local desiredFamilies = {
+    ["YEAGER"] = true, 
+    ["REISS"] = true, 
+    ["ACKERMAN"] = true,
+    ["SHIKI"] = true, 
+    ["FRITZ"] = true, 
+    ["HELOS"] = true
+}
+
+-- For display and dropdown purpose
+local desiredFamiliesList = {"YEAGER", "REISS", "ACKERMAN", "SHIKI", "FRITZ", "HELOS"}
+
+-- Auto rolling variables
+local task = task
+local autoRoll = false
+local rollThread = nil
+local currentRolledFamily = nil
+
+-- Timing variables
+local rollDelay = 0.6 -- Default to your preferred delay
+local spinsRemaining = 0
+
+-- Utility function to set which ranks you want to target
+local function setTargetRanks(ranks)
+    desiredFamilies = {}
+    desiredFamiliesList = {}
+    
+    for family, rank in pairs(familyRanks) do
+        for _, targetRank in ipairs(ranks) do
+            if rank == targetRank then
+                desiredFamilies[family] = true
+                table.insert(desiredFamiliesList, family)
+            end
+        end
+    end
+    
+    -- Update the MultiDropdown if it exists
+    if Options and Options.TargetFamilies then
+        local newValues = {}
+        for family, _ in pairs(desiredFamilies) do
+            newValues[family] = true
+        end
+        Options.TargetFamilies:SetValue(newValues)
+    end
+end
+
+-- Function to safely stop auto rolling
+local function stopAutoRoll()
+    pcall(function()
+        autoRoll = false
+        
+        -- Force update the GUI toggle if it exists
+        if Options and Options.AutoRollToggle then
+            task.spawn(function()
+                Options.AutoRollToggle:SetValue(false, true)
+            end)
+        end
+    end)
+end
+
+-- OPTIMIZED DIRECT ROLLING FUNCTION using your approach
+local function startFastAutoRoll()
+    if rollThread then
+        task.cancel(rollThread)
+        rollThread = nil
+    end
+    
+    autoRoll = true
+    
+    -- Create a new thread for rolling
+    rollThread = task.spawn(function()
+        while autoRoll do
+            local ok, remainingSpins, rolled = pcall(function() 
+                return GET:InvokeServer("Family", "Roll") 
+            end)
+            
+            if ok and type(remainingSpins) == "number" then
+                spinsRemaining = remainingSpins
+                currentRolledFamily = rolled
+                print(("Spins: %d | Rolled: %s"):format(remainingSpins, rolled))
+                
+                -- Check if we got a target
+                if desiredFamilies[tostring(rolled):upper()] then
+                    print("Got one of your targets! Stopping.")
+                    Fluent:Notify({
+                        Title = "Target Family Found!",
+                        Content = "Found: " .. tostring(rolled),
+                        Duration = 10
+                    })
+                    stopAutoRoll()
+                    break
+                end
+            end
+            
+            -- Brief wait between attempts
+            task.wait(rollDelay)
+        end
+    end)
+end
+
+-- Add an emergency stop function that can be called from the console
+_G.emergencyStop = function()
+    stopAutoRoll()
+    if rollThread then
+        task.cancel(rollThread)
+        rollThread = nil
+    end
+end
+
+-- Make the utility function available globally
+_G.setTargetRanks = setTargetRanks
+_G.stopRolling = stopAutoRoll
+
+-- Build the Roll Tab with minimal components
+do
+    -- Add heading and description
+    Tabs.Roll:AddParagraph({
+        Title = "Family Auto Roller (Optimized Version)",
+        Content = "Fast and direct auto-roller. Select target rarities or specific families below."
+    })
+
+    -- Add toggle for auto rolling
+    local AutoRollToggle = Tabs.Roll:AddToggle("AutoRollToggle", {
+        Title = "Auto Roll",
+        Description = "Automatically rolls until a desired family is found",
+        Default = false
+    })
+
+    AutoRollToggle:OnChanged(function(Value)
+        if Value then
+            startFastAutoRoll()
+        else
+            stopAutoRoll()
+        end
+    end)
+
+    -- Create a section for rarities
+    Tabs.Roll:AddSection("Target Rarities")
+
+    -- Add checkboxes for each rarity
+    local CommonToggle = Tabs.Roll:AddToggle("CommonToggle", {
+        Title = "Common Families",
+        Default = false
+    })
+
+    local RareToggle = Tabs.Roll:AddToggle("RareToggle", {
+        Title = "Rare Families",
+        Default = false
+    })
+
+    local EpicToggle = Tabs.Roll:AddToggle("EpicToggle", {
+        Title = "Epic Families",
+        Default = false
+    })
+
+    local LegendaryToggle = Tabs.Roll:AddToggle("LegendaryToggle", {
+        Title = "Legendary Families",
+        Default = true
+    })
+
+    local SecretToggle = Tabs.Roll:AddToggle("SecretToggle", {
+        Title = "Secret Families",
+        Default = true
+    })
+
+    -- Function to update target families based on rarity toggles
+    local function updateTargetFamilies()
+        local selectedRanks = {}
+        
+        if Options.CommonToggle.Value then table.insert(selectedRanks, "Common") end
+        if Options.RareToggle.Value then table.insert(selectedRanks, "Rare") end
+        if Options.EpicToggle.Value then table.insert(selectedRanks, "Epic") end
+        if Options.LegendaryToggle.Value then table.insert(selectedRanks, "Legendary") end
+        if Options.SecretToggle.Value then table.insert(selectedRanks, "Secret") end
+        
+        setTargetRanks(selectedRanks)
+    end
+
+    -- Connect the toggle changes to update target families
+    CommonToggle:OnChanged(updateTargetFamilies)
+    RareToggle:OnChanged(updateTargetFamilies)
+    EpicToggle:OnChanged(updateTargetFamilies)
+    LegendaryToggle:OnChanged(updateTargetFamilies)
+    SecretToggle:OnChanged(updateTargetFamilies)
+
+    -- Create a section for specific families
+    Tabs.Roll:AddSection("Specific Families")
+
+    -- Add multi-dropdown for specific families
+    local allFamilies = {}
+    for family, _ in pairs(familyRanks) do
+        table.insert(allFamilies, family)
+    end
+    table.sort(allFamilies)
+
+    local FamilyDropdown = Tabs.Roll:AddDropdown("TargetFamilies", {
+        Title = "Target Specific Families",
+        Values = allFamilies,
+        Multi = true,
+        Default = desiredFamiliesList
+    })
+
+    FamilyDropdown:OnChanged(function(Value)
+        desiredFamilies = {}
+        desiredFamiliesList = {}
+        for Family, State in next, Value do
+            if State then
+                desiredFamilies[Family] = true
+                table.insert(desiredFamiliesList, Family)
+            end
+        end
+    end)
+
+    -- Create a section for settings
+    Tabs.Roll:AddSection("Settings")
+    
+    -- Add stop button
+    Tabs.Roll:AddButton({
+        Title = "Force Stop",
+        Description = "Emergency stop for auto rolling",
+        Callback = function()
+            stopAutoRoll()
+            if rollThread then
+                task.cancel(rollThread)
+                rollThread = nil
+            end
+        end
+    })
+    
+    -- Slider for roll delay
+    Tabs.Roll:AddSlider("RollDelaySlider", {
+        Title = "Roll Delay",
+        Description = "Time between roll attempts",
+        Default = 0.6,
+        Min = 0.1,
+        Max = 2.0,
+        Rounding = 1,
+        Callback = function(Value)
+            rollDelay = Value
+        end
+    })
+    
+    -- Add current roll display
+    local statusParagraph = Tabs.Roll:AddParagraph({
+        Title = "Current Roll Status",
+        Content = "No rolls performed yet"
+    })
+    
+    -- Update the status paragraph occasionally
+    task.spawn(function()
+        while true do
+            task.wait(0.5)
+            if Tabs.Roll and currentRolledFamily then
+                pcall(function()
+                    Tabs.Roll:SetComponent("Current Roll Status", {
+                        Title = "Current Roll Status",
+                        Content = "Last rolled family: " .. tostring(currentRolledFamily) .. "\nSpins remaining: " .. tostring(spinsRemaining)
+                    })
+                end)
+            end
+        end
+    end)
+end
+
+-- Setup Interface and Save Manager
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("FamilyAutoRoller")
+SaveManager:SetFolder("FamilyAutoRoller")
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+-- Select Roll tab by default
+Window:SelectTab(1)
+
+-- Initial notification
+Fluent:Notify({
+    Title = "Family Auto Roller (Optimized)",
+    Content = "Script loaded successfully with faster rolling mechanism.",
+    Duration = 5
+})
+
+-- Load auto config if available
+SaveManager:LoadAutoloadConfig()
