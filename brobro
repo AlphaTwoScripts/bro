@@ -1,362 +1,307 @@
--- Load Fluent UI Library
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
 
--- Create Main Window
 local Window = Fluent:CreateWindow({
-    Title = "Family Auto Roller",
-    SubTitle = "by YourName",
+    Title = "Attack On Titan Revolution " .. Fluent.Version,
+    SubTitle = "by Ahjin",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 460),
-    Acrylic = true,
+    Acrylic = true, -- The blur may be detectable, setting this to false disables blur entirely
     Theme = "Dark",
-    MinimizeKey = Enum.KeyCode.LeftControl
+    MinimizeKey = Enum.KeyCode.LeftControl -- Used when theres no MinimizeKeybind
 })
 
--- Create Tabs
 local Tabs = {
-    Roll = Window:AddTab({ Title = "Roll", Icon = "refresh-cw" }),
+    Mission = Window:AddTab({ Title = "Mission", Icon = "target" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
--- Create Options reference
 local Options = Fluent.Options
 
--- Remote reference
-local GET = game:GetService("ReplicatedStorage")
-               :WaitForChild("Assets")
-               :WaitForChild("Remotes")
-               :WaitForChild("GET")
+-- Single notification when script loads
+Fluent:Notify({
+    Title = "Lobby",
+    Content = "loaded",
+    Duration = 5
+})
 
--- Family Rankings Database
-local familyRanks = {
-    -- Common
-    ["RAL"] = "Common",
-    ["REEVES"] = "Common",
-    ["PIKALE"] = "Common",
-    ["MUNSELL"] = "Common",
-    ["INOCENIO"] = "Common",
-    ["IGLEHAUT"] = "Common",
-    ["HUME"] = "Common",
-    ["BLOUSE"] = "Common",
-    ["BOZADO"] = "Common",
-    ["BOYEGA"] = "Common",
+-- Variables to track mission state
+local missionActive = false
+local currentMission = nil
 
-    -- Rare
-    ["SMITH"] = "Rare",
-    ["SPRINGER"] = "Rare",
-    ["KIRSTEIN"] = "Rare",
-    ["GRICE"] = "Rare",
-    ["AZUMABITO"] = "Rare",
-    ["BRAUS"] = "Rare",
-    ["KRUGER"] = "Rare",
+-- Mission Tab Implementation
+do
+    -- Add a description paragraph to explain the mission tab
+    Tabs.Mission:AddParagraph({
+        Title = "Mission Creator",
+        Content = "Create and start missions with custom maps, difficulties, and objectives."
+    })
 
-    -- Epic
-    ["TYBUR"] = "Epic",
-    ["LEONHART"] = "Epic",
-    ["GALLIARD"] = "Epic",
-    ["FINGER"] = "Epic",
-    ["BRAUN"] = "Epic",
-    ["ARLERT"] = "Epic",
-    ["KSAVER"] = "Epic",
-    ["ZOE"] = "Epic",
+    -- Map selection dropdown
+    local MapDropdown = Tabs.Mission:AddDropdown("MapDropdown", {
+        Title = "Select Map",
+        Description = "Choose the map for your mission",
+        Values = {"Shiganshina", "Trost", "Giant Forest", "Outskirts", "Utgard", "Loading Docks", "Stohess"},
+        Multi = false,
+        Default = "Shiganshina",
+    })
 
-    -- Legendary
-    ["YEAGER"] = "Legendary",
-    ["REISS"] = "Legendary",
-    ["ACKERMAN"] = "Legendary",
+    -- Difficulty selection dropdown
+    local DifficultyDropdown = Tabs.Mission:AddDropdown("DifficultyDropdown", {
+        Title = "Select Difficulty",
+        Description = "Choose the difficulty level",
+        Values = {"Easy", "Normal", "Hard", "Severe", "Aberrant"},
+        Multi = false,
+        Default = "Normal",
+    })
 
-    -- Secret
-    ["SHIKI"] = "Secret",
-    ["FRITZ"] = "Secret",
-    ["HELOS"] = "Secret"
-}
+    -- Objective selection dropdown
+    local ObjectiveDropdown = Tabs.Mission:AddDropdown("ObjectiveDropdown", {
+        Title = "Select Objective",
+        Description = "Choose the mission objective",
+        Values = {"Skirmish", "Holdout", "Annihilation"},
+        Multi = false,
+        Default = "Skirmish",
+    })
 
--- Default target families (using table for faster lookups)
-local desiredFamilies = {
-    ["YEAGER"] = true, 
-    ["REISS"] = true, 
-    ["ACKERMAN"] = true,
-    ["SHIKI"] = true, 
-    ["FRITZ"] = true, 
-    ["HELOS"] = true
-}
-
--- For display and dropdown purpose
-local desiredFamiliesList = {"YEAGER", "REISS", "ACKERMAN", "SHIKI", "FRITZ", "HELOS"}
-
--- Auto rolling variables
-local task = task
-local autoRoll = false
-local rollThread = nil
-local currentRolledFamily = nil
-
--- Timing variables
-local rollDelay = 0.6 -- Default to your preferred delay
-local spinsRemaining = 0
-
--- Utility function to set which ranks you want to target
-local function setTargetRanks(ranks)
-    desiredFamilies = {}
-    desiredFamiliesList = {}
+    -- Mission Type dropdown (added in case user wants to choose between Missions/Raids)
+    local MissionTypeDropdown = Tabs.Mission:AddDropdown("MissionTypeDropdown", {
+        Title = "Mission Type",
+        Description = "Choose between Missions or Raids",
+        Values = {"Missions", "Raids"},
+        Multi = false,
+        Default = "Missions",
+    })
     
-    for family, rank in pairs(familyRanks) do
-        for _, targetRank in ipairs(ranks) do
-            if rank == targetRank then
-                desiredFamilies[family] = true
-                table.insert(desiredFamiliesList, family)
-            end
-        end
-    end
-    
-    -- Update the MultiDropdown if it exists
-    if Options and Options.TargetFamilies then
-        local newValues = {}
-        for family, _ in pairs(desiredFamilies) do
-            newValues[family] = true
-        end
-        Options.TargetFamilies:SetValue(newValues)
-    end
-end
+    -- Modifiers multiselect dropdown
+    local ModifiersDropdown = Tabs.Mission:AddDropdown("ModifiersDropdown", {
+        Title = "Select Modifiers",
+        Description = "Choose modifiers to apply to your mission",
+        Values = {
+            "No Perks", 
+            "No Skills", 
+            "No Talents", 
+            "Nightmare",
+            "Oddball",
+            "Injury Prone",
+            "Chronic Injuries",
+            "Fog",
+            "Glass Cannon",
+            "Time Trial",
+            "Boring",
+            "Simple"
+        },
+        Multi = true,
+        Default = {},
+    })
 
--- Function to safely stop auto rolling
-local function stopAutoRoll()
-    pcall(function()
-        autoRoll = false
-        
-        -- Force update the GUI toggle if it exists
-        if Options and Options.AutoRollToggle then
-            task.spawn(function()
-                Options.AutoRollToggle:SetValue(false, true)
-            end)
-        end
-    end)
-end
-
--- OPTIMIZED DIRECT ROLLING FUNCTION using your approach
-local function startFastAutoRoll()
-    if rollThread then
-        task.cancel(rollThread)
-        rollThread = nil
-    end
-    
-    autoRoll = true
-    
-    -- Create a new thread for rolling
-    rollThread = task.spawn(function()
-        while autoRoll do
-            local ok, remainingSpins, rolled = pcall(function() 
-                return GET:InvokeServer("Family", "Roll") 
-            end)
+    -- Add a toggle button for Create & Start Mission
+    local CreateStartToggle = Tabs.Mission:AddToggle("CreateStartToggle", {
+        Title = "Create & Start Mission",
+        Description = "",
+        Default = false,
+        Callback = function(Value)
+            local GET = game:GetService("ReplicatedStorage"):WaitForChild("Assets"):WaitForChild("Remotes"):WaitForChild("GET")
             
-            if ok and type(remainingSpins) == "number" then
-                spinsRemaining = remainingSpins
-                currentRolledFamily = rolled
-                print(("Spins: %d | Rolled: %s"):format(remainingSpins, rolled))
+            if Value then -- Toggle is ON - Create and start mission
+                -- Get the selected values from dropdowns
+                local mapName = Options.MapDropdown.Value
+                local difficulty = Options.DifficultyDropdown.Value
+                local objective = Options.ObjectiveDropdown.Value
+                local missionType = Options.MissionTypeDropdown.Value
                 
-                -- Check if we got a target
-                if desiredFamilies[tostring(rolled):upper()] then
-                    print("Got one of your targets! Stopping.")
+                -- Construct the mission data
+                local missionData = {
+                    Name = mapName,
+                    Difficulty = difficulty,
+                    Type = missionType,
+                    Objective = objective
+                }
+                
+                -- Create the mission
+                local success, result = pcall(function()
+                    return GET:InvokeServer("S_Missions", "Create", missionData)
+                end)
+                
+                if success then
+                    -- Store the current mission for potential cancellation
+                    currentMission = result
+                    missionActive = true
+                    
+                    -- Apply modifiers if any are selected
+                    local selectedModifiers = Options.ModifiersDropdown.Value
+                    local modifiersList = {}
+                    
+                    -- Convert the table of modifiers to a comma-separated string
+                    for modifier, isSelected in pairs(selectedModifiers) do
+                        if isSelected then
+                            table.insert(modifiersList, modifier)
+                        end
+                    end
+                    
+                    -- If any modifiers were selected, apply them
+                    if #modifiersList > 0 then
+                        local modifiersString = table.concat(modifiersList, ",")
+                        
+                        -- Apply modifiers to the mission
+                        pcall(function()
+                            if result then
+                                result:SetAttribute("Modifiers", modifiersString)
+                            end
+                        end)
+                    end
+                    
+                    -- Start the mission
+                    task.wait(1)
+                    local ok, msg = pcall(function()
+                        return GET:InvokeServer("S_Missions", "Start")
+                    end)
+                    
+                    if ok then
+                        Fluent:Notify({
+                            Title = "Mission Status",
+                            Content = "Mission created and started successfully!",
+                            Duration = 5
+                        })
+                    else
+                        Fluent:Notify({
+                            Title = "Mission Status",
+                            Content = "⚠️ Mission created but failed to start: " .. tostring(msg),
+                            Duration = 5
+                        })
+                        Options.CreateStartToggle:SetValue(false)
+                        missionActive = false
+                    end
+                else
                     Fluent:Notify({
-                        Title = "Target Family Found!",
-                        Content = "Found: " .. tostring(rolled),
-                        Duration = 10
+                        Title = "Mission Status",
+                        Content = "❌ Failed to create mission: " .. tostring(result),
+                        Duration = 5
                     })
-                    stopAutoRoll()
-                    break
+                    Options.CreateStartToggle:SetValue(false)
+                    missionActive = false
+                end
+            else -- Toggle is OFF - Cancel mission if active
+                if missionActive and currentMission then
+                    -- Attempt to cancel the mission (if your game has this functionality)
+                    pcall(function()
+                        GET:InvokeServer("S_Missions", "Cancel")
+                    end)
+                    
+                    Fluent:Notify({
+                        Title = "Mission Status",
+                        Content = "Mission cancelled",
+                        Duration = 3
+                    })
+                    
+                    missionActive = false
+                    currentMission = nil
                 end
             end
-            
-            -- Brief wait between attempts
-            task.wait(rollDelay)
         end
-    end)
-end
-
--- Add an emergency stop function that can be called from the console
-_G.emergencyStop = function()
-    stopAutoRoll()
-    if rollThread then
-        task.cancel(rollThread)
-        rollThread = nil
-    end
-end
-
--- Make the utility function available globally
-_G.setTargetRanks = setTargetRanks
-_G.stopRolling = stopAutoRoll
-
--- Build the Roll Tab with minimal components
-do
-    -- Add heading and description
-    Tabs.Roll:AddParagraph({
-        Title = "Family Auto Roller (Optimized Version)",
-        Content = "Fast and direct auto-roller. Select target rarities or specific families below."
     })
 
-    -- Add toggle for auto rolling
-    local AutoRollToggle = Tabs.Roll:AddToggle("AutoRollToggle", {
-        Title = "Auto Roll",
-        Description = "Automatically rolls until a desired family is found",
-        Default = false
-    })
-
-    AutoRollToggle:OnChanged(function(Value)
-        if Value then
-            startFastAutoRoll()
-        else
-            stopAutoRoll()
-        end
-    end)
-
-    -- Create a section for rarities
-    Tabs.Roll:AddSection("Target Rarities")
-
-    -- Add checkboxes for each rarity
-    local CommonToggle = Tabs.Roll:AddToggle("CommonToggle", {
-        Title = "Common Families",
-        Default = false
-    })
-
-    local RareToggle = Tabs.Roll:AddToggle("RareToggle", {
-        Title = "Rare Families",
-        Default = false
-    })
-
-    local EpicToggle = Tabs.Roll:AddToggle("EpicToggle", {
-        Title = "Epic Families",
-        Default = false
-    })
-
-    local LegendaryToggle = Tabs.Roll:AddToggle("LegendaryToggle", {
-        Title = "Legendary Families",
-        Default = true
-    })
-
-    local SecretToggle = Tabs.Roll:AddToggle("SecretToggle", {
-        Title = "Secret Families",
-        Default = true
-    })
-
-    -- Function to update target families based on rarity toggles
-    local function updateTargetFamilies()
-        local selectedRanks = {}
-        
-        if Options.CommonToggle.Value then table.insert(selectedRanks, "Common") end
-        if Options.RareToggle.Value then table.insert(selectedRanks, "Rare") end
-        if Options.EpicToggle.Value then table.insert(selectedRanks, "Epic") end
-        if Options.LegendaryToggle.Value then table.insert(selectedRanks, "Legendary") end
-        if Options.SecretToggle.Value then table.insert(selectedRanks, "Secret") end
-        
-        setTargetRanks(selectedRanks)
-    end
-
-    -- Connect the toggle changes to update target families
-    CommonToggle:OnChanged(updateTargetFamilies)
-    RareToggle:OnChanged(updateTargetFamilies)
-    EpicToggle:OnChanged(updateTargetFamilies)
-    LegendaryToggle:OnChanged(updateTargetFamilies)
-    SecretToggle:OnChanged(updateTargetFamilies)
-
-    -- Create a section for specific families
-    Tabs.Roll:AddSection("Specific Families")
-
-    -- Add multi-dropdown for specific families
-    local allFamilies = {}
-    for family, _ in pairs(familyRanks) do
-        table.insert(allFamilies, family)
-    end
-    table.sort(allFamilies)
-
-    local FamilyDropdown = Tabs.Roll:AddDropdown("TargetFamilies", {
-        Title = "Target Specific Families",
-        Values = allFamilies,
-        Multi = true,
-        Default = desiredFamiliesList
-    })
-
-    FamilyDropdown:OnChanged(function(Value)
-        desiredFamilies = {}
-        desiredFamiliesList = {}
-        for Family, State in next, Value do
-            if State then
-                desiredFamilies[Family] = true
-                table.insert(desiredFamiliesList, Family)
-            end
-        end
-    end)
-
-    -- Create a section for settings
-    Tabs.Roll:AddSection("Settings")
-    
-    -- Add stop button
-    Tabs.Roll:AddButton({
-        Title = "Force Stop",
-        Description = "Emergency stop for auto rolling",
+    -- Add a button to create mission without starting (simplified)
+    Tabs.Mission:AddButton({
+        Title = "Create Mission Only",
+        Description = "Creates the mission with selected settings without starting it",
         Callback = function()
-            stopAutoRoll()
-            if rollThread then
-                task.cancel(rollThread)
-                rollThread = nil
+            local GET = game:GetService("ReplicatedStorage"):WaitForChild("Assets"):WaitForChild("Remotes"):WaitForChild("GET")
+            
+            -- Get the selected values from dropdowns
+            local mapName = Options.MapDropdown.Value
+            local difficulty = Options.DifficultyDropdown.Value
+            local objective = Options.ObjectiveDropdown.Value
+            local missionType = Options.MissionTypeDropdown.Value
+            
+            -- Construct the mission data
+            local missionData = {
+                Name = mapName,
+                Difficulty = difficulty,
+                Type = missionType,
+                Objective = objective
+            }
+            
+            -- Create the mission
+            local success, result = pcall(function()
+                return GET:InvokeServer("S_Missions", "Create", missionData)
+            end)
+            
+            if success then
+                -- Apply modifiers if any are selected
+                local selectedModifiers = Options.ModifiersDropdown.Value
+                local modifiersList = {}
+                
+                -- Convert the table of modifiers to a comma-separated string
+                for modifier, isSelected in pairs(selectedModifiers) do
+                    if isSelected then
+                        table.insert(modifiersList, modifier)
+                    end
+                end
+                
+                -- If any modifiers were selected, apply them
+                if #modifiersList > 0 then
+                    local modifiersString = table.concat(modifiersList, ",")
+                    
+                    -- Apply modifiers to the mission
+                    pcall(function()
+                        if result then
+                            result:SetAttribute("Modifiers", modifiersString)
+                        end
+                    end)
+                end
+                
+                Fluent:Notify({
+                    Title = "Mission Status",
+                    Content = "Mission created successfully",
+                    Duration = 5
+                })
+            else
+                Fluent:Notify({
+                    Title = "Mission Status",
+                    Content = "Failed to create mission",
+                    Duration = 5
+                })
             end
         end
     })
-    
-    -- Slider for roll delay
-    Tabs.Roll:AddSlider("RollDelaySlider", {
-        Title = "Roll Delay",
-        Description = "Time between roll attempts",
-        Default = 0.6,
-        Min = 0.1,
-        Max = 2.0,
-        Rounding = 1,
-        Callback = function(Value)
-            rollDelay = Value
-        end
-    })
-    
-    -- Add current roll display
-    local statusParagraph = Tabs.Roll:AddParagraph({
-        Title = "Current Roll Status",
-        Content = "No rolls performed yet"
-    })
-    
-    -- Update the status paragraph occasionally
-    task.spawn(function()
-        while true do
-            task.wait(0.5)
-            if Tabs.Roll and currentRolledFamily then
-                pcall(function()
-                    Tabs.Roll:SetComponent("Current Roll Status", {
-                        Title = "Current Roll Status",
-                        Content = "Last rolled family: " .. tostring(currentRolledFamily) .. "\nSpins remaining: " .. tostring(spinsRemaining)
-                    })
-                end)
+
+    -- Simple button to start existing mission
+    Tabs.Mission:AddButton({
+        Title = "Start Existing Mission",
+        Description = "Starts an already created mission (if you are the leader)",
+        Callback = function()
+            local GET = game:GetService("ReplicatedStorage"):WaitForChild("Assets"):WaitForChild("Remotes"):WaitForChild("GET")
+            
+            -- Attempt to start the mission
+            local ok, msg = pcall(function()
+                return GET:InvokeServer("S_Missions", "Start")
+            end)
+            
+            if not ok then
+                Fluent:Notify({
+                    Title = "Mission Status",
+                    Content = "Failed to start mission",
+                    Duration = 5
+                })
             end
         end
-    end)
+    })
 end
 
--- Setup Interface and Save Manager
+-- Addons setup
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("FamilyAutoRoller")
-SaveManager:SetFolder("FamilyAutoRoller")
+InterfaceManager:SetFolder("FluentScriptHub")
+SaveManager:SetFolder("FluentScriptHub/specific-game")
+
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
 
--- Select Roll tab by default
 Window:SelectTab(1)
 
--- Initial notification
-Fluent:Notify({
-    Title = "Family Auto Roller (Optimized)",
-    Content = "Script loaded successfully with faster rolling mechanism.",
-    Duration = 5
-})
-
--- Load auto config if available
+-- LoadAutoloadConfig
 SaveManager:LoadAutoloadConfig()
