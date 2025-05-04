@@ -1,0 +1,1823 @@
+-- Wait for game to load
+repeat wait() until game:IsLoaded()
+
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local http = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- Get current place ID to determine which features to show
+local CurrentPlaceId = game.PlaceId
+print("Current Place ID: " .. CurrentPlaceId)
+local isInMainMenu = (CurrentPlaceId == 13379208636)
+
+-- Discord webhook URL for sending rewards information
+local url = "https://discord.com/api/webhooks/1364070882397519872/sBJRDke8Hjk0R5K1aJz3Pfekksv6kuSosfqyftyxRPyuCoVvJT7TlVw6rLeCKnaPALR5"
+
+-- Function to send messages to Discord webhook
+local function sendMessage(msg)
+    local data = {
+        ["content"] = msg
+    }
+    local actual = http:JSONEncode(data)
+    local success, response = pcall(function()
+        request({Url = url, Method = "POST", Body = actual, Headers = {["content-type"] = "application/json"}})
+    end)
+    if success then
+        print("Message sent successfully!")
+    else
+        print("Failed to send message: "..tostring(response))
+    end
+end
+
+local Window = Fluent:CreateWindow({
+    Title = "Attack On Titan Revolution " .. Fluent.Version,
+    SubTitle = "by Ahjin",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+-- Create all tabs regardless of game state
+local Tabs = {
+    Features = Window:AddTab({ Title = "Features", Icon = "rocket" }),
+	Teleport = Window:AddTab({ Title = "Teleport", Icon = "map-pin" }),
+    Tracker = Window:AddTab({ Title = "Rewards Tracker", Icon = "eye" }),
+    Visual = Window:AddTab({ Title = "Visual", Icon = "palette" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+local Options = Fluent.Options
+
+-- Welcome notification
+Fluent:Notify({
+    Title = "AOT:R Autofarm",
+    Content = "Script has been loaded successfully. Current Place ID: " .. CurrentPlaceId,
+    Duration = 5
+})
+
+-- Function for the Nape Extender feature
+local function extendNape()
+    while Options.NapeExtender.Value do
+        if not Options.NapeExtender.Value then return end
+        
+        -- Check if Titans folder exists
+        local titansFolder = game:GetService("Workspace"):FindFirstChild("Titans")
+        if not titansFolder then
+            print("Titans folder not found. Wait and retry...")
+            wait(1)
+            continue
+        end
+        
+        for i, titans in pairs(titansFolder:GetChildren()) do
+            local stepone = titans:FindFirstChild("Hitboxes")
+            if stepone then
+                local steptwo = stepone:FindFirstChild("Hit")
+                if steptwo then
+                    local final = steptwo:FindFirstChild("Nape")
+                    if final then
+                        final.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
+                        final.Transparency = 0.85
+                        final.CanCollide = false
+                        print("Extended Nape For:", titans.Name)
+                    end
+                end
+            end
+        end
+        wait(0.05)
+    end
+end
+
+-- Add features to the Features tab based on game state
+if not isInMainMenu then
+    -- Add Nape Extender toggle
+    local NapeToggle = Tabs.Features:AddToggle("NapeExtender", {
+        Title = "Nape Extender",
+        Default = false,
+        Description = "Enlarges titan nape hitboxes for easier hits",
+        Callback = function(Value)
+            if Value then
+                task.spawn(extendNape)
+            end
+        end
+    })
+
+    -- Add the autofarm toggle
+    local AutofarmToggle = Tabs.Features:AddToggle("Autofarm", {
+        Title = "OP Autofarm",
+        Default = false,
+        Description = "Required Steel, Trust skills",
+        Callback = function(Value)
+            if Value then
+                local Players = game:GetService("Players")
+                local workspace = game:GetService("Workspace")
+                local VIP = game:GetService("VirtualInputManager")
+                local ReplicatedStorage = game:GetService("ReplicatedStorage")
+                local RunService = game:GetService("RunService")
+
+                local player = Players.LocalPlayer
+                local character = player.Character or player.CharacterAdded:Wait()
+                local rootPart = character:WaitForChild("HumanoidRootPart")
+
+                -- Enlarge titan hitboxes
+                local titans = workspace.Titans:GetChildren()
+                for _, titan in ipairs(titans) do
+                    local Hitboxes = titan:FindFirstChild("Hitboxes")
+                    if Hitboxes then
+                        local Hit = Hitboxes:FindFirstChild("Hit")
+                        if Hit then
+                            local Nape = Hit:FindFirstChild("Nape")
+                            if Nape then
+                                print("Found Nape")
+                                
+                                -- Resize the Nape hitbox
+                                Nape.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
+                                
+                                -- Teleport Nape to 5 studs in front of the player's character
+                                local frontOffset = rootPart.CFrame.LookVector * 5
+                                Nape.Position = rootPart.Position + frontOffset
+                                
+                                -- Ensure Nape is anchored
+                                Nape.Anchored = true
+                            end
+                        end
+                    end
+                end
+
+                -- The fixed position you want to lock the player to
+                local fixedPosition = Vector3.new(rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
+                
+                -- Allowable vertical movement range
+                local verticalRange = 5
+                
+                -- Function to keep the player in place
+                local function keepPlayerInPlace()
+                    local yPos = math.clamp(rootPart.Position.Y, fixedPosition.Y - verticalRange, fixedPosition.Y + verticalRange)
+                    rootPart.CFrame = CFrame.new(fixedPosition.X, yPos, fixedPosition.Z)
+                end
+                
+                -- Run the function on every frame
+                local connectionRef = RunService.RenderStepped:Connect(keepPlayerInPlace)
+                
+                -- Simulate key event for the first skill
+                VIP:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+                task.wait(0.1)
+                
+                -- Find Thrust and Steel parts and modify them
+                local Thrust = workspace:FindFirstChild("HakerOreoScary_Thrust")
+                local Steel = workspace:FindFirstChild("HakerOreoScary_Steel")
+                
+                if Thrust then
+                    Thrust.Size = Vector3.new(1999, 1999, 1999)
+                    Thrust.CanCollide = false
+                end
+                
+                task.wait(2)
+                
+                -- Simulate key event for the second skill
+                VIP:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
+                task.wait(0.1)
+                
+                if Steel then
+                    Steel.Size = Vector3.new(1999, 1999, 1999)
+                    Steel.CanCollide = false
+                end
+                
+                -- Path to the Slay object
+                local Slay = ReplicatedStorage.Objectives:WaitForChild("Slay")
+                
+                -- Requirement attribute
+                local requirement = Slay:GetAttribute("Requirement")
+                
+                -- Wait for Slay.Value to meet the requirement before proceeding with key events
+                while Slay.Value ~= requirement do
+                    task.wait(0.1)
+                    -- Check if toggle was turned off
+                    if not Options.Autofarm.Value then
+                        if connectionRef then
+                            connectionRef:Disconnect()
+                        end
+                        return
+                    end
+                end
+                
+                task.wait(1)
+                
+                VIP:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
+                task.wait(0.1)
+                VIP:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
+                task.wait(0.1)
+                VIP:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
+                task.wait(0.1)
+                VIP:SendKeyEvent(true, Enum.KeyCode.Return, false, game) -- Key down
+                VIP:SendKeyEvent(false, Enum.KeyCode.Return, false, game) -- Key up
+            end
+        end
+    })
+
+    -- Add a hitbox size slider to Features tab
+    local HitboxSlider = Tabs.Features:AddSlider("HitboxSize", {
+        Title = "Hitbox Size",
+        Description = "Adjust the size of titan hitboxes",
+        Default = 250,
+        Min = 10,
+        Max = 500,
+        Rounding = 0,
+        Callback = function(Value)
+            -- This value will be used in the Nape Extender function
+            print("Hitbox size set to:", Value)
+        end
+    })
+
+local AutoEscapeToggle = Tabs.Features:AddToggle("AutoEscapeEnabled", {
+    Title = "Auto Escape",
+    Default = false,
+    Description = "Automatically escapes from grabs and titan hands",
+    Callback = function(Value)
+        _G.AutoEscapeEnabled = Value
+        if Value then
+            -- Create a new connection when enabled
+            _G.AutoEscapeConnection = RunService.Heartbeat:Connect(function()
+                if not _G.AutoEscapeEnabled then return end
+                
+                local player = game:GetService("Players").LocalPlayer
+                local gui = player:WaitForChild("PlayerGui")
+                local interface = gui:FindFirstChild("Interface")
+                
+                if interface then
+                    local notifyInteract = interface:FindFirstChild("Notify")
+                    if notifyInteract and notifyInteract:FindFirstChild("Interact") and notifyInteract.Interact.Visible then
+                        local buttonsGui = interface:FindFirstChild("Buttons")
+                        if buttonsGui then
+                            for _, button in ipairs(buttonsGui:GetChildren()) do
+                                if button:IsA("CanvasGroup") and button:FindFirstChild("Interact") then
+                                    local keyName = button.Name
+                                    -- PC: Simulate keyboard key press
+                                    VirtualInputManager:SendKeyEvent(true, keyName, false, game)
+                                    task.wait(0.05)
+                                    VirtualInputManager:SendKeyEvent(false, keyName, false, game)
+                                    
+                                    -- Mobile: Simulate button press (if applicable)
+                                    if button.Interact:IsA("ImageButton") or button.Interact:IsA("TextButton") then
+                                        pcall(function()
+                                            button.Interact:Activate() -- simulate tap
+                                        end)
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+        else
+            -- Disconnect when disabled
+            if _G.AutoEscapeConnection then
+                _G.AutoEscapeConnection:Disconnect()
+                _G.AutoEscapeConnection = nil
+            end
+        end
+    end
+})
+
+    -- Information paragraph for Features tab
+    Tabs.Features:AddParagraph({
+        Title = "Information",
+        Content = "auto-kills titans by making their weak spots bigger and attacking for you."
+    })
+else
+    -- Add a message for Features tab when in main menu
+    Tabs.Features:AddParagraph({
+        Title = "Combat Features Unavailable",
+        Content = "Combat features are only available during missions. Please join a mission to access Nape Extender, Autofarm, and other combat features."
+    })
+end
+
+local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
+    Title = "Slash Through Hitbox",
+    Default = false,
+    Description = "Slashes through titan hitbox with M1 spam",
+    Callback = function(Value)
+        _G.SlashThroughHitboxEnabled = Value -- Global variable to track state
+        
+        if Value then
+            -- Services
+            local Players = game:GetService("Players")
+            local Workspace = game:GetService("Workspace")
+            local VIM = game:GetService("VirtualInputManager")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local RunService = game:GetService("RunService")
+            local TweenService = game:GetService("TweenService")
+
+            -- Configuration
+            local Options = {
+                AutoFarm = { Value = true },
+                NapeExtender = { Value = true },
+                HitboxSize = { Value = 10 },
+                MoveSpeed = 100,
+                SlashSpeed = 130,
+                SlashDistance = 15,
+                AttackDuration = 4,
+                WaitAfterCompletion = 2.5,
+                ClickOffsetX = 50,
+                ClickOffsetY = 60
+            }
+
+            -- References
+            local player = Players.LocalPlayer
+            local character = player.Character or player.CharacterAdded:Wait()
+            local hrp = character:WaitForChild("HumanoidRootPart")
+            
+            -- Connections for cleanup
+            local connections = {}
+            local currentTween = nil
+            local isSlashing = false
+
+            -- Notify Helper
+            local function notify(title, message, duration)
+                Fluent:Notify({ Title = title, Content = message, Duration = duration or 3 })
+            end
+
+            -- THIS IS THE KEY CHANGE: NEVER ANCHOR THE CHARACTER
+            -- We'll use CFrame manipulation instead of tweens for movement
+            local function moveToPosition(targetPos)
+                local distance = (targetPos - hrp.Position).Magnitude
+                local duration = distance / Options.MoveSpeed
+                local startTime = tick()
+                
+                local startPos = hrp.Position
+                
+                while tick() - startTime < duration and _G.SlashThroughHitboxEnabled do
+                    local alpha = (tick() - startTime) / duration
+                    alpha = math.min(alpha, 1)
+                    
+                    local newPos = startPos:Lerp(targetPos, alpha)
+                    hrp.CFrame = CFrame.new(newPos)
+                    
+                    task.wait()
+                end
+                
+                return _G.SlashThroughHitboxEnabled
+            end
+            
+            -- Slash function that doesn't anchor
+            local function moveSlash(startPos, endPos)
+                local distance = (endPos - startPos).Magnitude
+                local duration = distance / Options.SlashSpeed
+                local startTime = tick()
+                
+                while tick() - startTime < duration and _G.SlashThroughHitboxEnabled do
+                    local alpha = (tick() - startTime) / duration
+                    alpha = math.min(alpha, 1)
+                    
+                    local newPos = startPos:Lerp(endPos, alpha)
+                    hrp.CFrame = CFrame.new(newPos)
+                    
+                    task.wait()
+                end
+                
+                return _G.SlashThroughHitboxEnabled
+            end
+            
+            -- Slash through nape function
+            local function slashThroughNape(napePart, titan)
+                if isSlashing then return true end
+                
+                -- IMPORTANT FIX: Check if titan is still alive before slashing
+                if not titan or not titan:IsDescendantOf(Workspace) or 
+                   not titan:FindFirstChild("Humanoid") or 
+                   titan.Humanoid.Health <= 0 then
+                    return false
+                end
+                
+                isSlashing = true
+                
+                local startTime = tick()
+                local slashCount = 0
+                local slashDirections = {
+                    {Vector3.new(-Options.SlashDistance, 0, 0), Vector3.new(Options.SlashDistance, 0, 0)},
+                    {Vector3.new(0, -Options.SlashDistance, 0), Vector3.new(0, Options.SlashDistance, 0)},
+                    {Vector3.new(0, 0, -Options.SlashDistance), Vector3.new(0, 0, Options.SlashDistance)},
+                    {Vector3.new(-Options.SlashDistance, -Options.SlashDistance, 0), Vector3.new(Options.SlashDistance, Options.SlashDistance, 0)},
+                    {Vector3.new(-Options.SlashDistance, 0, -Options.SlashDistance), Vector3.new(Options.SlashDistance, 0, Options.SlashDistance)}
+                }
+                
+                task.spawn(function()
+                    while (tick() - startTime) < Options.AttackDuration and _G.SlashThroughHitboxEnabled do
+                        -- Check if titan is still alive during slashing
+                        if not titan or not titan:IsDescendantOf(Workspace) or 
+                           not titan:FindFirstChild("Humanoid") or 
+                           titan.Humanoid.Health <= 0 then
+                            isSlashing = false
+                            break
+                        end
+                        
+                        local currentDirection = (slashCount % #slashDirections) + 1
+                        local dir = slashDirections[currentDirection]
+                        
+                        local napePos = napePart.Position
+                        
+                        local startPos = napePos + dir[1]
+                        local endPos = napePos + dir[2]
+                        
+                        moveSlash(startPos, endPos)
+                        moveSlash(endPos, startPos)
+                        
+                        slashCount = slashCount + 1
+                    end
+                    
+                    isSlashing = false
+                end)
+                
+                local waitEndTime = tick() + Options.AttackDuration
+                while tick() < waitEndTime and _G.SlashThroughHitboxEnabled do
+                    -- Check if titan is still alive during wait period
+                    if not titan or not titan:IsDescendantOf(Workspace) or 
+                       not titan:FindFirstChild("Humanoid") or 
+                       titan.Humanoid.Health <= 0 then
+                        isSlashing = false
+                        break
+                    end
+                    
+                    task.wait(0.1)
+                    if not _G.SlashThroughHitboxEnabled or not isSlashing then
+                        break
+                    end
+                end
+                
+                task.wait(0.2)
+                isSlashing = false
+                
+                return _G.SlashThroughHitboxEnabled
+            end
+
+            -- NoClip function that doesn't affect HRP
+            local function enableNoClip()
+                local connection = RunService.Stepped:Connect(function()
+                    if character and character:FindFirstChild("Humanoid") then
+                        for _, part in pairs(character:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
+                            end
+                        end
+                    end
+                end)
+                table.insert(connections, connection)
+            end
+            
+            -- Setup M1 auto-clicker
+            _G.M1SlashFarm = true
+            task.spawn(function()
+                while _G.M1SlashFarm and _G.SlashThroughHitboxEnabled do
+                    VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                    task.wait(0.02)
+                    VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                    task.wait(0.04)
+                end
+            end)
+            
+            -- Check mission completion and auto-retry
+            local function checkMissionCompletion()
+                local connection = RunService.Heartbeat:Connect(function()
+                    if not _G.SlashThroughHitboxEnabled then return end
+                    
+                    local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
+                    
+                    if Slay then
+                        local value = Slay.Value
+                        local requirement = Slay:GetAttribute("Requirement")
+                        
+                        if value and requirement and value >= requirement then
+                            notify("Mission Complete!", "Detected completion. Waiting for UI...", 3)
+                            
+                            task.wait(Options.WaitAfterCompletion)
+                            
+                            local retryButton = game:GetService("Players").LocalPlayer.PlayerGui.Interface.Rewards.Main.Info.Main.Buttons.Retry
+                            
+                            if retryButton then
+                                local buttonPos = retryButton.AbsolutePosition
+                                local buttonSize = retryButton.AbsoluteSize
+                                
+                                local clickX = buttonPos.X + (buttonSize.X / 2) + Options.ClickOffsetX
+                                local clickY = buttonPos.Y + (buttonSize.Y / 2) + Options.ClickOffsetY
+                                
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
+                                task.wait(0.1)
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
+                                
+                                notify("Restarting Mission", "Clicked retry button", 3)
+                            else
+                                notify("Button Not Found", "Could not find retry button", 3)
+                            end
+                        end
+                    end
+                    
+                    task.wait(1)
+                end)
+                
+                table.insert(connections, connection)
+            end
+
+            -- Function to check if a titan is alive and valid
+            local function isTitanValid(titan)
+                return titan and 
+                       titan:IsDescendantOf(Workspace) and 
+                       titan:FindFirstChild("Humanoid") and 
+                       titan.Humanoid.Health > 0
+            end
+
+            -- Main auto-farm loop
+            local function autoFarm()
+                while not Workspace:FindFirstChild("Titans") do
+                    task.wait(1)
+                    if not _G.SlashThroughHitboxEnabled then return end
+                end
+
+                if Options.AutoFarm.Value then
+                    local titansFolder = Workspace:FindFirstChild("Titans")
+                    if titansFolder then
+                        local validTitan = nil
+                        for _, titan in ipairs(titansFolder:GetChildren()) do
+                            if isTitanValid(titan) then
+                                validTitan = titan
+                                break
+                            end
+                        end
+                        
+                        if validTitan then
+                            local hitboxes = validTitan:FindFirstChild("Hitboxes")
+                            local nape = hitboxes and hitboxes:FindFirstChild("Hit") and hitboxes.Hit:FindFirstChild("Nape")
+                            if nape then
+                                hrp.CFrame = CFrame.new(nape.Position + Vector3.new(0, 0, 0))
+                                task.wait(0.2)
+                            end
+                        end
+                    end
+                end
+
+                while _G.SlashThroughHitboxEnabled and Options.AutoFarm.Value do
+                    local titansFolder = Workspace:FindFirstChild("Titans")
+                    if not titansFolder then
+                        task.wait(1)
+                        continue
+                    end
+                    
+                    local titanList = {}
+                    for _, titan in ipairs(titansFolder:GetChildren()) do
+                        if not titan:IsA("Model") then continue end
+                        
+                        -- Important fix: Check titan is alive
+                        if not isTitanValid(titan) then continue end
+                        
+                        local hitboxes = titan:FindFirstChild("Hitboxes")
+                        local hit = hitboxes and hitboxes:FindFirstChild("Hit")
+                        local nape = hit and hit:FindFirstChild("Nape")
+                        
+                        if nape then
+                            table.insert(titanList, { titan = titan, nape = nape })
+                        end
+                    end
+                    
+                    table.sort(titanList, function(a, b)
+                        return (a.nape.Position - hrp.Position).Magnitude < (b.nape.Position - hrp.Position).Magnitude
+                    end)
+
+                    local targetedTitan = false
+                    for _, entry in ipairs(titanList) do
+                        if not _G.SlashThroughHitboxEnabled then break end
+                        
+                        local titan = entry.titan
+                        local nape = entry.nape
+
+                        -- Check again that titan is still valid before targeting
+                        if not isTitanValid(titan) then continue end
+                        
+                        targetedTitan = true
+
+                        if Options.NapeExtender.Value then
+                            nape.Size = Vector3.new(Options.HitboxSize.Value, 100, Options.HitboxSize.Value)
+                            nape.Transparency = 0.85
+                            nape.CanCollide = false
+                            
+                            local titanHead = titan:FindFirstChild("Head")
+                            if titanHead then
+                                nape.Position = titanHead.Position + Vector3.new(0, 160, 0)
+                            end
+                        end
+
+                        local targetPos = nape.Position
+                        local success = moveToPosition(targetPos)
+                        if not success then break end
+                        
+                        -- Pass titan instance to slashThroughNape
+                        local slashSuccess = slashThroughNape(nape, titan)
+                        if not slashSuccess then break end
+                    end
+                    
+                    if not targetedTitan then
+                        task.wait(1)
+                    else
+                        task.wait(0.05)
+                    end
+                end
+            end
+
+            -- Cleanup function
+            local function cleanup()
+                isSlashing = false
+                
+                for _, connection in pairs(connections) do
+                    if connection and connection.Connected then
+                        connection:Disconnect()
+                    end
+                end
+                
+                if currentTween then
+                    currentTween:Cancel()
+                    currentTween = nil
+                end
+                
+                _G.M1SlashFarm = false
+            end
+
+            -- Setup cleanup on toggle off
+            local toggleOffConnection = RunService.Heartbeat:Connect(function()
+                if not _G.SlashThroughHitboxEnabled then
+                    cleanup()
+                    toggleOffConnection:Disconnect()
+                end
+            end)
+            table.insert(connections, toggleOffConnection)
+
+            -- Run farm
+            enableNoClip()
+            checkMissionCompletion()
+            
+            -- Setup cleanup on character respawn
+            local characterConnection = player.CharacterAdded:Connect(function(newCharacter)
+                character = newCharacter
+                hrp = character:WaitForChild("HumanoidRootPart")
+                task.wait(1)
+                enableNoClip()
+            end)
+            table.insert(connections, characterConnection)
+            
+            -- Start farming
+            task.spawn(autoFarm)
+            
+            notify("Slash Through Hitbox Activated", "Slashing through titan napes enabled", 3)
+            
+        else
+            -- Disable farm when toggle is turned off
+            _G.SlashThroughHitboxEnabled = false
+            _G.M1SlashFarm = false
+            
+            notify("Slash Farm Deactivated", "Farming stopped", 3)
+        end
+    end
+})
+
+local TeleportFarmToggle = Tabs.Features:AddToggle("TeleportFarm", {
+    Title = "Teleport Farm",
+    Default = false,
+    Description = "Instant TP",
+    Callback = function(Value)
+        if Value then
+            -- Disable regular autofarm if it's on to prevent conflicts
+            if Options.Autofarm.Value then
+                Options.Autofarm:SetValue(false)
+            end
+            
+            -- Also disable TweenAutofarm if it's on
+            if Options.TweenAutofarm.Value then
+                Options.TweenAutofarm:SetValue(false)
+            end
+            
+            -- Variables for the teleport farm
+            local Players = game:GetService("Players")
+            local workspace = game:GetService("Workspace")
+            local VIM = game:GetService("VirtualInputManager")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local RunService = game:GetService("RunService")
+            local TweenService = game:GetService("TweenService")
+            
+            local player = Players.LocalPlayer
+            local character = player.Character or player.CharacterAdded:Wait()
+            local rootPart = character:WaitForChild("HumanoidRootPart")
+            
+            -- Hover height as requested
+            local hoverHeight = 80
+            
+            -- Auto-clicker variables
+            local autoClick = false
+            local slashButton = nil
+            
+            -- Tracking variables
+            local currentTargetTitan = nil
+            local currentTween = nil
+            
+            -- Function to check if titans exist
+            local function titanExists()
+                local titansFolder = workspace:FindFirstChild("Titans")
+                return titansFolder and #titansFolder:GetChildren() > 0
+            end
+            
+            -- Function to find nearest titan - prioritize alive titans
+            local function getNearestTitan()
+                local titansFolder = workspace:FindFirstChild("Titans")
+                if not titansFolder then return nil end
+                
+                local nearestTitan = nil
+                local nearestDistance = math.huge
+                
+                for _, titan in pairs(titansFolder:GetChildren()) do
+                    if titan:FindFirstChild("Head") then
+                        -- Check if titan is likely alive (has humanoid with health)
+                        local humanoid = titan:FindFirstChild("Humanoid")
+                        if humanoid and humanoid.Health > 0 then
+                            local distance = (titan.Head.Position - rootPart.Position).Magnitude
+                            if distance < nearestDistance then
+                                nearestDistance = distance
+                                nearestTitan = titan
+                            end
+                        end
+                    end
+                end
+                
+                -- If no alive titans found with humanoid, just get any titan with a head
+                if not nearestTitan then
+                    for _, titan in pairs(titansFolder:GetChildren()) do
+                        if titan:FindFirstChild("Head") then
+                            local distance = (titan.Head.Position - rootPart.Position).Magnitude
+                            if distance < nearestDistance then
+                                nearestDistance = distance
+                                nearestTitan = titan
+                            end
+                        end
+                    end
+                end
+                
+                return nearestTitan
+            end
+            
+            -- Position and resize hitboxes
+            local function positionHitboxes()
+                local titansFolder = workspace:FindFirstChild("Titans")
+                if titansFolder then
+                    for _, titan in ipairs(titansFolder:GetChildren()) do
+                        local Hitboxes = titan:FindFirstChild("Hitboxes")
+                        if Hitboxes then
+                            local Hit = Hitboxes:FindFirstChild("Hit")
+                            if Hit then
+                                local Nape = Hit:FindFirstChild("Nape")
+                                if Nape then
+                                    -- Set hitbox size to 30 as requested
+                                    Nape.Size = Vector3.new(30, 30, 30)
+                                    
+                                    -- Position hitbox for easier hitting
+                                    local titanPos = titan:FindFirstChild("Head") and titan.Head.Position or titan.PrimaryPart.Position
+                                    Nape.Position = Vector3.new(titanPos.X, titanPos.Y + hoverHeight * 0.6, titanPos.Z)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            
+            -- Auto-clicking control
+            local function startAutoClick() autoClick = true end
+            local function stopAutoClick() autoClick = false end
+            
+            -- Very fast tween function - using ultra-short tweens for quick movement
+            local function tweenAboveTitan()
+                local nearestTitan = getNearestTitan()
+                
+                if not nearestTitan then
+                    currentTargetTitan = nil
+                    stopAutoClick()
+                    return
+                end
+                
+                -- Check if we need to change targets
+                local shouldChangeTitan = false
+                
+                -- Always target the nearest if we don't have a target
+                if not currentTargetTitan then
+                    shouldChangeTitan = true
+                -- Or if our current target isn't valid anymore
+                elseif not currentTargetTitan:FindFirstChild("Head") or not currentTargetTitan.Parent then
+                    shouldChangeTitan = true
+                -- Or if we found a closer target
+                elseif nearestTitan ~= currentTargetTitan then
+                    shouldChangeTitan = true
+                end
+                
+                -- Change titan if needed
+                if shouldChangeTitan then
+                    -- Cancel any existing tween
+                    if currentTween then
+                        currentTween:Cancel()
+                        currentTween = nil
+                    end
+                    
+                    -- Update target
+                    currentTargetTitan = nearestTitan
+                    
+                    if nearestTitan:FindFirstChild("Head") and Options.TeleportFarm.Value then
+                        local titanPos = nearestTitan.Head.Position
+                        local targetPos = Vector3.new(titanPos.X, titanPos.Y + hoverHeight, titanPos.Z)
+                        
+                        -- Very fast tween - 0.05 second duration
+                        local tweenInfo = TweenInfo.new(0.05, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+                        currentTween = TweenService:Create(rootPart, tweenInfo, {
+                            CFrame = CFrame.new(targetPos) * CFrame.Angles(math.rad(-50), math.rad(180), 0)
+                        })
+                        currentTween:Play()
+                        
+                        startAutoClick()
+                    else
+                        stopAutoClick()
+                    end
+                else
+                    -- We already have the right target, just update position if needed
+                    if currentTargetTitan:FindFirstChild("Head") and Options.TeleportFarm.Value then
+                        local titanPos = currentTargetTitan.Head.Position
+                        local targetPos = Vector3.new(titanPos.X, titanPos.Y + hoverHeight, titanPos.Z)
+                        local currentPos = rootPart.Position
+                        
+                        -- Only create a new tween if we're not close enough
+                        local distanceToTarget = (currentPos - targetPos).Magnitude
+                        if distanceToTarget > 5 then
+                            -- Cancel any existing tween
+                            if currentTween then
+                                currentTween:Cancel()
+                                currentTween = nil
+                            end
+                            
+                            -- Very fast tween - 0.05 second duration
+                            local tweenInfo = TweenInfo.new(0.05, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+                            currentTween = TweenService:Create(rootPart, tweenInfo, {
+                                CFrame = CFrame.new(targetPos) * CFrame.Angles(math.rad(-50), math.rad(180), 0)
+                            })
+                            currentTween:Play()
+                        end
+                        
+                        startAutoClick()
+                    else
+                        stopAutoClick()
+                    end
+                end
+            end
+            
+            -- Initial hitbox setup
+            positionHitboxes()
+            
+            -- Fast position updates
+            local positionConnection = RunService.RenderStepped:Connect(function()
+                if not Options.TeleportFarm.Value then return end
+                
+                if titanExists() then
+                    tweenAboveTitan()
+                    positionHitboxes()
+                else
+                    stopAutoClick()
+                end
+                
+                -- Skills usage code removed
+            end)
+            
+            -- Replace the old clicking system with the new simple auto-clicker
+            local vim = game:GetService("VirtualInputManager")
+            _G.M1Farm = true
+            task.spawn(function()
+                while _G.M1Farm and Options.TeleportFarm.Value do
+                    vim:SendMouseButtonEvent(0, 0, 0, true, game, 0)  -- mouse1 press
+                    task.wait(0.05)
+                    vim:SendMouseButtonEvent(0, 0, 0, false, game, 0) -- mouse1 release
+                    task.wait(0.3)
+                end
+            end)
+            
+            -- Additional titan check - aggressive targeting
+            local titanCheckConnection = RunService.Heartbeat:Connect(function()
+                if not Options.TeleportFarm.Value then return end
+                
+                -- Check if current target is still valid
+                if currentTargetTitan and (not currentTargetTitan:FindFirstChild("Head") or not currentTargetTitan.Parent) then
+                    currentTargetTitan = nil
+                    tweenAboveTitan() -- Force immediate retargeting
+                end
+            end)
+            
+           -- Monitor for mission completion with adjustable click position
+            local function checkMissionCompletion()
+                -- Adjustable values - you can change these
+                local waitTimeAfterCompletion = 2.5  -- Time to wait after mission completes
+                local clickOffsetX = 50  -- X offset from center of button (adjust if needed)
+                local clickOffsetY = 60  -- Y offset from center of button (adjust if needed)
+                
+                while Options.TeleportFarm.Value do
+                    local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
+                    
+                    if Slay then
+                        local value = Slay.Value
+                        local requirement = Slay:GetAttribute("Requirement")
+                        
+                        if value and requirement and value >= requirement then
+                            Fluent:Notify({
+                                Title = "Mission Complete!",
+                                Content = "Detected completion. Waiting for UI...",
+                                Duration = 3
+                            })
+                            
+                            -- Wait for rewards UI
+                            task.wait(waitTimeAfterCompletion)
+                            
+                            -- Find the retry button path
+                            local retryButton = game:GetService("Players").LocalPlayer.PlayerGui.Interface.Rewards.Main.Info.Main.Buttons.Retry
+                            
+                            if retryButton then
+                                -- Get the position of the button
+                                local buttonPos = retryButton.AbsolutePosition
+                                local buttonSize = retryButton.AbsoluteSize
+                                
+                                -- Calculate click position with adjustable offsets
+                                local clickX = buttonPos.X + (buttonSize.X / 2) + clickOffsetX
+                                local clickY = buttonPos.Y + (buttonSize.Y / 2) + clickOffsetY
+                                
+                                
+                                -- Simulate a mouse click
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
+                                task.wait(0.1)
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
+                            else
+                                Fluent:Notify({
+                                    Title = "Button Not Found",
+                                    Content = "",
+                                    Duration = 3
+                                })
+                            end
+                        end
+                    end
+                    
+                    task.wait(1)  -- Check mission status every second
+                end
+            end
+
+            -- Start mission completion checking
+            task.spawn(checkMissionCompletion)
+            
+            -- Handle new titans
+            local childAddedConnection = nil
+            local titansFolder = workspace:FindFirstChild("Titans")
+            if titansFolder then
+                childAddedConnection = titansFolder.ChildAdded:Connect(function(child)
+                    if Options.TeleportFarm.Value then
+                        -- Immediate response to new titans
+                        positionHitboxes()
+                        -- Force retargeting check
+                        currentTargetTitan = nil
+                    end
+                end)
+            end
+            
+            -- Clean up when toggle is turned off
+            task.spawn(function()
+                while Options.TeleportFarm.Value do task.wait(0.1) end
+                
+                if currentTween then currentTween:Cancel() end
+                if positionConnection then positionConnection:Disconnect() end
+                _G.M1Farm = false  -- Stop the auto-clicker
+                if titanCheckConnection then titanCheckConnection:Disconnect() end
+                if childAddedConnection then childAddedConnection:Disconnect() end
+                stopAutoClick()
+            end)
+            
+            -- Initial notification
+            Fluent:Notify({
+                Title = "Teleport Autofarm Activated (No Skills)",
+                Content = "",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Add Blade Refill Toggle to Features Tab
+local BladeRefillToggle = Tabs.Features:AddToggle("BladeRefill", {
+    Title = "Auto Blade Refill",
+    Default = false,
+    Description = "Automatically teleports to refill station when all blades are used",
+    Callback = function(Value)
+        if Value then
+            -- Variables for blade refill
+            local VirtualInputManager = game:GetService("VirtualInputManager")
+            local Players = game:GetService("Players")
+            local player = Players.LocalPlayer
+            local RunService = game:GetService("RunService")
+            local TweenService = game:GetService("TweenService")
+            
+            -- Configuration
+            local REFILL_COOLDOWN = 5 -- Seconds to wait between refill attempts
+            local TELEPORT_OFFSET = Vector3.new(0, 10, 0) -- Higher offset to avoid getting stuck
+            local REFILL_WAIT_TIME = 3 -- Longer wait time for refill to complete
+            
+            local lastRefillTime = 0
+            local isRefilling = false
+            
+            -- Function to check blade count
+            local function getBladesCount()
+                local bladesGui = player.PlayerGui.Interface.HUD.Main.Top.Blades.Sets
+                if bladesGui then
+                    local currentBlades = tonumber(string.match(bladesGui.Text, "(%d+)"))
+                    return currentBlades or 0
+                end
+                return 0
+            end
+            
+            -- Function to check if blades are actually used (broken)
+            local function areBladesUsed()
+                -- Check if character exists
+                local character = workspace.Characters:FindFirstChild(player.Name)
+                if not character then return false end
+                
+                local rig = character:FindFirstChild("Rig_"..player.Name)
+                if not rig then return false end
+                
+                local rightHand = rig:FindFirstChild("RightHand")
+                local leftHand = rig:FindFirstChild("LeftHand")
+                
+                -- Check if both hands exist
+                if not (rightHand and leftHand) then return false end
+                
+                -- Find the blade objects in the hands
+                local rightBlade = nil
+                local leftBlade = nil
+                
+                for _, item in pairs(rightHand:GetChildren()) do
+                    if item:IsA("BasePart") and item.Name:find("Blade") then
+                        rightBlade = item
+                        break
+                    end
+                end
+                
+                for _, item in pairs(leftHand:GetChildren()) do
+                    if item:IsA("BasePart") and item.Name:find("Blade") then
+                        leftBlade = item
+                        break
+                    end
+                end
+                
+                -- Check if blades aren't visible (used/broken)
+                if (not rightBlade or rightBlade.Transparency >= 0.9) and 
+                   (not leftBlade or leftBlade.Transparency >= 0.9) then
+                    return true -- Blades are used/broken
+                end
+                
+                return false -- Blades are still usable
+            end
+            
+            -- Function to safely teleport
+            local function safeTeleport(destination)
+                local character = player.Character
+                if not character then return false end
+                
+                local humanoid = character:FindFirstChild("Humanoid")
+                local root = character:FindFirstChild("HumanoidRootPart")
+                
+                if not humanoid or not root then return false end
+                
+                -- Store original state
+                local originalWalkSpeed = humanoid.WalkSpeed
+                local originalJumpPower = humanoid.JumpPower
+                
+                -- Attempt teleport
+                pcall(function()
+                    -- Temporarily disable movement to prevent interference
+                    humanoid.WalkSpeed = 0
+                    humanoid.JumpPower = 0
+                    
+                    -- Teleport
+                    root.CFrame = destination
+                    
+                    -- Small wait to stabilize
+                    task.wait(0.1)
+                end)
+                
+                -- Restore original state
+                pcall(function()
+                    humanoid.WalkSpeed = originalWalkSpeed
+                    humanoid.JumpPower = originalJumpPower
+                end)
+                
+                return true
+            end
+            
+            -- Function to refill blades
+            local function refillBlades()
+                if isRefilling or not Options.BladeRefill.Value then return end
+                isRefilling = true
+                
+                -- Store autofarm states to restore later
+                local tweenFarmWasActive = Options.TweenAutofarm.Value
+                local teleportFarmWasActive = Options.TeleportFarm.Value
+                local autofarmWasActive = Options.Autofarm and Options.Autofarm.Value or false
+                
+                -- Temporarily disable all autofarms during refill
+                if tweenFarmWasActive then Options.TweenAutofarm:SetValue(false) end
+                if teleportFarmWasActive then Options.TeleportFarm:SetValue(false) end
+                if autofarmWasActive then Options.Autofarm:SetValue(false) end
+                
+                -- Small delay to ensure autofarms are fully stopped
+                task.wait(0.5)
+                
+                print("Starting blade refill process...")
+                
+                -- Save current position
+                local character = player.Character
+                if not character then
+                    isRefilling = false
+                    return
+                end
+                
+                local root = character:FindFirstChild("HumanoidRootPart")
+                if not root then
+                    isRefilling = false
+                    return
+                end
+                
+                local originalCFrame = root.CFrame
+                
+                -- Search for a valid refill station
+                local station
+                for _, obj in pairs(workspace:FindFirstChild("Unclimbable") and workspace.Unclimbable:FindFirstChild("Reloads"):GetChildren() or {}) do
+                    if obj:FindFirstChild("Refill") then
+                        station = obj
+                        break
+                    end
+                end
+                
+                if not station then
+                    Fluent:Notify({
+                        Title = "Refill Error",
+                        Content = "No refill station found. Try again later.",
+                        Duration = 3
+                    })
+                    isRefilling = false
+                    
+                    -- Restore autofarm states after error
+                    task.wait(0.5)
+                    if tweenFarmWasActive then Options.TweenAutofarm:SetValue(true) end
+                    if teleportFarmWasActive then Options.TeleportFarm:SetValue(true) end
+                    if autofarmWasActive then Options.Autofarm:SetValue(true) end
+                    
+                    return
+                end
+                
+                print("Found refill station, teleporting...")
+                
+                -- Notify user
+                Fluent:Notify({
+                    Title = "Refilling Blades",
+                    Content = "Teleporting to refill station...",
+                    Duration = 2
+                })
+                
+                -- Use smooth tween first for more reliable positioning
+                local tweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                local targetCFrame = station:GetPivot() + TELEPORT_OFFSET
+                
+                local tween = TweenService:Create(root, tweenInfo, {
+                    CFrame = targetCFrame
+                })
+                
+                -- Play tween and wait for completion
+                tween:Play()
+                tween.Completed:Wait()
+                
+                -- Then ensure position with direct teleport
+                safeTeleport(targetCFrame)
+                
+                -- Wait to register proximity
+                task.wait(1.0)
+                
+                -- Press R to trigger refill multiple times to ensure it works
+                print("Pressing R to refill...")
+                for i = 1, 3 do
+                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+                    task.wait(0.1)
+                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+                    task.wait(0.3)
+                end
+                
+                -- Wait longer for refill to complete
+                task.wait(REFILL_WAIT_TIME)
+                
+                -- Verify refill success
+                local newBladeCount = getBladesCount()
+                if newBladeCount > 0 then
+                    Fluent:Notify({
+                        Title = "Blades Refilled",
+                        Content = "Successfully refilled blades: " .. newBladeCount .. "/3",
+                        Duration = 2
+                    })
+                else
+                    Fluent:Notify({
+                        Title = "Refill Warning",
+                        Content = "Attempted refill but still at 0 blades. Retrying soon.",
+                        Duration = 2
+                    })
+                    -- Set a shorter cooldown if refill failed
+                    lastRefillTime = tick() - (REFILL_COOLDOWN - 2)
+                end
+                
+                print("Returning to original position...")
+                -- Go back to original position with safer teleportation
+                pcall(function()
+                    -- Check if character still exists
+                    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                        -- Use tween for smoother return
+                        local returnTweenInfo = TweenInfo.new(0.5, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+                        local returnTween = TweenService:Create(player.Character.HumanoidRootPart, returnTweenInfo, {
+                            CFrame = originalCFrame
+                        })
+                        returnTween:Play()
+                        returnTween.Completed:Wait()
+                    end
+                end)
+                
+                -- Update last refill time
+                lastRefillTime = tick()
+                isRefilling = false
+                print("Blade refill process completed")
+                
+                -- Restore autofarm states with a slight delay
+                task.wait(0.5)
+                if tweenFarmWasActive then Options.TweenAutofarm:SetValue(true) end
+                if teleportFarmWasActive then Options.TeleportFarm:SetValue(true) end
+                if autofarmWasActive then Options.Autofarm:SetValue(true) end
+            end
+            
+            -- Main loop for refill monitoring
+            local refillConnection = RunService.Heartbeat:Connect(function()
+                -- Skip if we're already refilling or if cooldown hasn't passed
+                if isRefilling or tick() - lastRefillTime < REFILL_COOLDOWN or not Options.BladeRefill.Value then
+                    return
+                end
+                
+                -- Check blade count AND if blades are actually used/broken
+                local blades = getBladesCount()
+                local bladesUsed = areBladesUsed()
+                
+                -- Only refill when we have 0 blades AND they're actually used/broken
+                if blades == 0 and bladesUsed then
+                    print("All blades are used up. Refilling...")
+                    refillBlades()
+                end
+            end)
+            
+            -- Setup a higher priority check to ensure refill occurs even during intense autofarm
+            local emergencyCheckConnection = nil
+            emergencyCheckConnection = RunService.RenderStepped:Connect(function()
+                -- Only do emergency check once every 2 seconds to avoid spam
+                if tick() % 2 > 0.1 or isRefilling or tick() - lastRefillTime < REFILL_COOLDOWN then
+                    return
+                end
+                
+                -- Emergency blade check - higher priority than the other check
+                local blades = getBladesCount()
+                local bladesUsed = areBladesUsed()
+                
+                if blades == 0 and bladesUsed and (Options.TweenAutofarm.Value or Options.TeleportFarm.Value) then
+                    print("EMERGENCY: All blades are used during autofarm. Forcing refill...")
+                    refillBlades()
+                end
+            end)
+            
+            -- Cleanup function
+            task.spawn(function()
+                while Options.BladeRefill.Value do task.wait(0.1) end
+                
+                if refillConnection then refillConnection:Disconnect() end
+                if emergencyCheckConnection then emergencyCheckConnection:Disconnect() end
+                
+                -- Cancel any ongoing refill operation
+                isRefilling = false
+            end)
+            
+            Fluent:Notify({
+                Title = "Auto Blade Refill Enabled",
+                Content = "Will pause farming to refill when all blades are used up",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Add Auto Blade Reload Toggle to Features Tab (IMPROVED VERSION USING DIRECT REMOTES)
+local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
+    Title = "Auto Blade Reload",
+    Default = false,
+    Description = "Automatically reloads blades when they break (using server remotes)",
+    Callback = function(Value)
+        if Value then
+            -- Variables for blade reload
+            local Players = game:GetService("Players")
+            local player = Players.LocalPlayer
+            local RunService = game:GetService("RunService")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            
+            -- Setup remote function
+            local remote = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Remotes"):WaitForChild("GET")
+            
+            -- Variables for timing and state
+            local lastReloadTime = 0
+            local RELOAD_COOLDOWN = 1 -- Seconds to wait between reload attempts
+            local isReloading = false
+            
+            -- Direct server reload function (more reliable than key simulation)
+            local function reloadBladesViaRemote()
+                local currentTime = tick()
+                
+                -- Check cooldown and prevent spam
+                if currentTime - lastReloadTime < RELOAD_COOLDOWN then
+                    return
+                end
+                
+                -- Set reloading state to prevent multiple simultaneous calls
+                if isReloading then return end
+                isReloading = true
+                
+                -- Call server remote directly
+                print("Reloading blades via remote...")
+                pcall(function()
+                    remote:InvokeServer("Blades", "Reload")
+                end)
+                
+                -- Update last reload time
+                lastReloadTime = currentTime
+                isReloading = false
+            end
+            
+            -- Fallback function using key simulation (in case remote fails)
+            local function fallbackKeyReload()
+                local currentTime = tick()
+                
+                -- Check cooldown
+                if currentTime - lastReloadTime < RELOAD_COOLDOWN then
+                    return
+                end
+                
+                -- Use VirtualInputManager as fallback
+                local VirtualInputManager = game:GetService("VirtualInputManager")
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+                task.wait(0.05)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+                
+                -- Update last reload time
+                lastReloadTime = currentTime
+            end
+            
+            -- Main monitoring loop for blade transparency
+            local reloadConnection = RunService.Heartbeat:Connect(function()
+                if not Options.BladeReload.Value then return end
+                
+                -- Check if character exists
+                local character = workspace.Characters:FindFirstChild(player.Name)
+                if not character then return end
+                
+                local rig = character:FindFirstChild("Rig_"..player.Name)
+                if not rig then return end
+                
+                local rightHand = rig:FindFirstChild("RightHand")
+                local leftHand = rig:FindFirstChild("LeftHand")
+                
+                -- Check if both hands exist
+                if not (rightHand and leftHand) then return end
+                
+                -- Find the blade objects in the hands
+                local rightBlade = nil
+                local leftBlade = nil
+                
+                for _, item in pairs(rightHand:GetChildren()) do
+                    if item:IsA("BasePart") and item.Name:find("Blade") then
+                        rightBlade = item
+                        break
+                    end
+                end
+                
+                for _, item in pairs(leftHand:GetChildren()) do
+                    if item:IsA("BasePart") and item.Name:find("Blade") then
+                        leftBlade = item
+                        break
+                    end
+                end
+                
+                -- Check transparency of either blade
+                if (rightBlade and rightBlade.Transparency >= 0.9) or 
+                   (leftBlade and leftBlade.Transparency >= 0.9) then
+                    -- Try remote first, with fallback to key press
+                    local success = pcall(function()
+                        reloadBladesViaRemote()
+                    end)
+                    
+                    -- If remote call failed, use key press as fallback
+                    if not success then
+                        print("Remote reload failed, using fallback key press")
+                        fallbackKeyReload()
+                    end
+                end
+            end)
+            
+            -- Cleanup function
+            task.spawn(function()
+                while Options.BladeReload.Value do task.wait(0.1) end
+                
+                if reloadConnection then
+                    reloadConnection:Disconnect()
+                end
+            end)
+            
+            Fluent:Notify({
+                Title = "Auto Blade Reload Enabled",
+                Content = "Will automatically reload blades when they break (using server remotes)",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Add features to the Visual tab - some are conditional
+if not isInMainMenu then
+    -- Add Titan ESP toggle to the Visual tab
+    local ESPToggle = Tabs.Visual:AddToggle("TitanESP", {
+        Title = "Titan ESP",
+        Default = false,
+        Description = "Highlights all titans for better visibility",
+        Callback = function(Value)
+            if Value then
+                local titansFolder = game.Workspace:FindFirstChild("Titans")
+                if not titansFolder then
+                    Fluent:Notify({
+                        Title = "Error",
+                        Content = "Titans folder not found. Are you in a mission?",
+                        Duration = 3
+                    })
+                    return
+                end
+                
+                for _, titan in pairs(titansFolder:GetChildren()) do
+                    -- Check if highlight already exists
+                    if not titan:FindFirstChild("Highlight") then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Parent = titan
+                        highlight.Archivable = true
+                        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                        highlight.Enabled = true
+                        highlight.FillColor = Color3.fromRGB(255, 0, 4)
+                        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        highlight.FillTransparency = 0.5
+                        highlight.OutlineTransparency = 0
+                    end
+                end
+                
+                -- Connect to ChildAdded to highlight new titans
+                game.Workspace.Titans.ChildAdded:Connect(function(titan)
+                    if Options.TitanESP.Value then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Parent = titan
+                        highlight.Archivable = true
+                        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                        highlight.Enabled = true
+                        highlight.FillColor = Color3.fromRGB(255, 0, 4)
+                        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        highlight.FillTransparency = 0.5
+                        highlight.OutlineTransparency = 0
+                    end
+                end)
+            else
+                -- Remove highlights when toggled off
+                local titansFolder = game.Workspace:FindFirstChild("Titans")
+                if titansFolder then
+                    for _, titan in pairs(titansFolder:GetChildren()) do
+                        local highlight = titan:FindFirstChild("Highlight")
+                        if highlight then
+                            highlight:Destroy()
+                        end
+                    end
+                end
+            end
+        end
+    })
+
+    -- Add ESP color picker for titan highlights
+    local ESPColorPicker = Tabs.Visual:AddColorpicker("ESPColor", {
+        Title = "ESP Color",
+        Default = Color3.fromRGB(255, 0, 4),
+        Description = "Choose the color for titan ESP",
+        Callback = function(Value)
+            local titansFolder = game.Workspace:FindFirstChild("Titans")
+            if titansFolder then
+                for _, titan in pairs(titansFolder:GetChildren()) do
+                    local highlight = titan:FindFirstChild("Highlight")
+                    if highlight then
+                        highlight.FillColor = Value
+                    end
+                end
+            end
+        end
+    })
+else
+    -- Add a message for Visual tab when in main menu
+    Tabs.Visual:AddParagraph({
+        Title = "Titan ESP Unavailable",
+        Content = "Titan ESP features are only available during missions. Please join a mission to access these features."
+    })
+end
+
+-- Add game optimization toggle (available everywhere)
+local OptimizeToggle = Tabs.Visual:AddToggle("OptimizeGame", {
+    Title = "Optimize Game",
+    Default = false,
+    Description = "Reduces graphics for better performance (not reversible within session)",
+    Callback = function(Value)
+        if Value then
+            local decalsyeeted = true
+            local g = game
+            local w = g.Workspace
+            local l = g.Lighting
+            local t = w.Terrain
+            
+            t.WaterWaveSize = 0
+            t.WaterWaveSpeed = 0
+            t.WaterReflectance = 0
+            t.WaterTransparency = 0
+            l.GlobalShadows = false
+            l.FogEnd = 9e9
+            l.Brightness = 0
+            settings().Rendering.QualityLevel = "Level01"
+            
+            for i, v in pairs(g:GetDescendants()) do
+                if v:IsA("Part") or v:IsA("Union") or v:IsA("CornerWedgePart") or v:IsA("TrussPart") then
+                    v.Material = Enum.Material.Plastic
+                    v.Reflectance = 0
+                elseif v:IsA("Decal") or v:IsA("Texture") and decalsyeeted then
+                    v.Transparency = 1
+                elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+                    v.Lifetime = NumberRange.new(0)
+                elseif v:IsA("Explosion") then
+                    v.BlastPressure = 1
+                    v.BlastRadius = 1
+                elseif v:IsA("Fire") or v:IsA("SpotLight") or v:IsA("Smoke") then
+                    v.Enabled = false
+                elseif v:IsA("MeshPart") then
+                    v.Material = Enum.Material.Plastic
+                    v.Reflectance = 0
+                    v.TextureID = 10385902758728957
+                end
+            end
+            
+            for i, e in pairs(l:GetChildren()) do
+                if e:IsA("BlurEffect") or e:IsA("SunRaysEffect") or e:IsA("ColorCorrectionEffect") or e:IsA("BloomEffect") or e:IsA("DepthOfFieldEffect") then
+                    e.Enabled = false
+                end
+            end
+            
+            Fluent:Notify({
+                Title = "Game Optimized",
+                Content = "Graphics settings have been reduced for better performance",
+                Duration = 5
+            })
+        end
+    end
+})
+
+-- Information paragraph for Visual tab (shown everywhere)
+Tabs.Visual:AddParagraph({
+    Title = "Visual Options",
+    Content = "These options alter the game's appearance. The optimization option improves performance but reduces graphics quality."
+})
+
+-- Add features to the Tracker tab based on game state
+if not isInMainMenu then
+    -- Add the rewards tracker toggle to the Tracker tab
+    local RewardsToggle = Tabs.Tracker:AddToggle("RewardsTracker", {
+        Title = "Rewards Tracker",
+        Default = true,
+        Description = "Track and send rewards to Discord webhook",
+        Callback = function(Value)
+            if Value then
+                -- Create a new thread to avoid freezing the UI
+                task.spawn(function()
+                    local tracking = true
+                    
+                    -- Create a function to stop tracking when toggle is turned off
+                    local function checkToggleState()
+                        return Options.RewardsTracker.Value
+                    end
+                    
+                    while checkToggleState() do
+                        local LocalPlayer = Players.LocalPlayer
+                        local startgui = LocalPlayer:WaitForChild("PlayerGui")
+                        local interface = startgui:WaitForChild("Interface")
+                        local stepone = interface:WaitForChild("Rewards", 5)
+                        
+                        if not stepone then 
+                            print("Rewards UI not found")
+                            task.wait(1)
+                            continue
+                        end
+                        
+                        local steptwo = stepone:WaitForChild("Main", 2)
+                        if not steptwo then continue end
+                        
+                        local stepthree = steptwo:WaitForChild("Info", 2)
+                        if not stepthree then continue end
+                        
+                        local stepfour = stepthree:WaitForChild("Main", 2)
+                        if not stepfour then continue end
+                        
+                        local stepfive = stepfour:WaitForChild("Items", 2)
+                        if not stepfive then continue end
+                        
+                        local slay = ReplicatedStorage:WaitForChild("Objectives"):WaitForChild("Slay", 2)
+                        
+                        if slay then
+                            local value = slay:GetAttribute("Value") or slay.Value
+                            local requirement = slay:GetAttribute("Requirement")
+                            
+                            Fluent:Notify({
+                                Title = "Tracking Progress",
+                                Content = "Current: " .. tostring(value) .. " / Required: " .. tostring(requirement),
+                                Duration = 3
+                            })
+                            
+                            if value and requirement and value >= requirement then
+                                Fluent:Notify({
+                                    Title = "Rewards Available!",
+                                    Content = "Requirement met. Collecting rewards information.",
+                                    Duration = 5
+                                })
+                                
+                                if stepfive then
+                                    sendMessage("**REWARDS FOUND:**")
+                                    
+                                    local itemsFound = false
+                                    for _, item in pairs(stepfive:GetChildren()) do
+                                        if item:IsA("Frame") or item:IsA("TextLabel") then
+                                            local itemName = item.Name or "Unknown Item"
+                                            sendMessage("- " .. itemName)
+                                            itemsFound = true
+                                        end
+                                    end
+                                    
+                                    if not itemsFound then
+                                        sendMessage("No specific items found in the rewards UI.")
+                                    end
+                                    
+                                    sendMessage("------------------------")
+                                else
+                                    sendMessage("Items folder not found in the rewards UI.")
+                                end
+                                
+                                -- Turn off the toggle after rewards are processed
+                                Options.RewardsTracker:SetValue(false)
+                                break
+                            else
+                                print("Requirement not met yet. Current: " .. tostring(value) .. " / Required: " .. tostring(requirement))
+                            end
+                        else
+                            print("Slay objective not found.")
+                        end
+                        
+                        task.wait(2)
+                    end
+                end)
+            end
+        end
+    })
+
+    -- Add information paragraph to the Tracker tab
+    Tabs.Tracker:AddParagraph({
+        Title = "Tracker Information",
+        Content = "The rewards tracker will monitor your game progress and send reward information to Discord when objectives are completed."
+    })
+
+    -- Add URL input for Discord webhook
+    local WebhookInput = Tabs.Tracker:AddInput("WebhookURL", {
+        Title = "Discord Webhook URL",
+        Default = url,
+        Placeholder = "Paste here",
+        Numeric = false,
+        Finished = true,
+        Callback = function(Value)
+            url = Value
+            print("Webhook URL updated")
+        end
+    })
+else
+    -- Add a message for Tracker tab when in main menu
+    Tabs.Tracker:AddParagraph({
+        Title = "Rewards Tracker Unavailable",
+        Content = "The rewards tracker is only available during missions. Please join a mission to track and send rewards to Discord."
+    })
+end
+
+Tabs.Teleport:AddParagraph({
+    Title = "Current Place Info",
+    Content = "Current Place ID: " .. game.PlaceId
+})
+
+-- Force Retry button with your server hop script
+Tabs.Teleport:AddButton({
+    Title = "Force Retry",
+    Description = "Retry current game/mission",
+    Callback = function()
+        local TeleportService = game:GetService("TeleportService")
+        local player = game.Players.LocalPlayer
+        local currentPlaceId = game.PlaceId
+        TeleportService:Teleport(currentPlaceId, player)
+    end
+})
+
+-- Go Back to Lobby button (with remotes but no prints)
+Tabs.Teleport:AddButton({
+    Title = "Go Back to Lobby",
+    Description = "Returns to lobby using game remotes",
+    Callback = function()
+        -- Immediate Force Retry Script without prints
+        -- Get the required remotes
+        local remotesPath = game:GetService("ReplicatedStorage"):WaitForChild("Assets"):WaitForChild("Remotes")
+        local getRemote = remotesPath:WaitForChild("GET") -- RemoteFunction
+        local postRemote = remotesPath:WaitForChild("POST") -- RemoteEvent
+        
+        -- Function to force retry with all possible methods
+        local function executeForceRetry()
+            -- Try all possible retry methods in sequence
+            
+            -- Method 1: Send direct retry command via POST
+            pcall(function()
+                postRemote:FireServer("Retry")
+            end)
+            
+            -- Wait a small amount to let the first method process
+            wait(0.1)
+            
+            -- Method 2: Try to invoke retry function via GET
+            pcall(function()
+                getRemote:InvokeServer("Functions", "Retry", "Add")
+            end)
+            
+            -- Wait a small amount to let the second method process
+            wait(0.1)
+            
+            -- Method 3: Try to simulate the game's retry logic
+            pcall(function()
+                -- Set internal retry state
+                local retryResult = getRemote:InvokeServer("Functions", "Retry", "Add")
+                
+                -- Force a loading screen transition
+                postRemote:FireServer("Loading_Screen", "Transition", "Retry")
+            end)
+            
+            -- Wait a small amount to let the third method process
+            wait(0.1)
+            
+            -- Method 4: Try direct teleport command
+            pcall(function()
+                postRemote:FireServer("Functions", "Teleport")
+            end)
+        end
+        -- Execute the retry function immediately
+        executeForceRetry()
+        -- If the first attempt doesn't work, try a few more times with delays
+        spawn(function()
+            for i = 1, 3 do
+                wait(1) -- Wait 1 second between attempts
+                executeForceRetry()
+            end
+        end)
+    end
+})
+
+
+-- Setup the settings manager
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("AOT_R_Scripts")
+SaveManager:SetFolder("AOT_R_Scripts/configs")
+
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+-- Load any saved configurations
+SaveManager:LoadAutoloadConfig()
