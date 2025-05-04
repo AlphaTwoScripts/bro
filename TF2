@@ -1,0 +1,154 @@
+-- Attack on Titan: Revolution - Unified GUI Script (ESP + AutoFarm + AutoReload + Instant Reload + Instant Refill + Neck Targeting)
+
+-- Services
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local LocalPlayer = Players.LocalPlayer
+local Character = LocalPlayer.Character or LocalPlayer.CharacterAdded:Wait()
+
+-- UI Setup
+local ScreenGui = Instance.new("ScreenGui", game.CoreGui)
+ScreenGui.Name = "AOTR_GUI"
+
+local Frame = Instance.new("Frame", ScreenGui)
+Frame.Size = UDim2.new(0, 200, 0, 200)
+Frame.Position = UDim2.new(0, 20, 0, 100)
+Frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+
+local UICorner = Instance.new("UICorner", Frame)
+UICorner.CornerRadius = UDim.new(0, 8)
+
+local function CreateButton(text, posY)
+    local btn = Instance.new("TextButton", Frame)
+    btn.Size = UDim2.new(1, -20, 0, 40)
+    btn.Position = UDim2.new(0, 10, 0, posY)
+    btn.Text = text
+    btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    return btn
+end
+
+local ESPButton = CreateButton("👁️ Titan ESP", 10)
+local FarmButton = CreateButton("⚔️ AutoFarm", 60)
+local ReloadButton = CreateButton("♻️ Auto Reload", 110)
+
+-- States
+local ESP_Enabled = false
+local Farm_Enabled = false
+local Reload_Enabled = false
+local MenuVisible = true
+
+-- Titan Finder
+local function getTitanFolder()
+    return workspace:FindFirstChild("Titans") or workspace:FindFirstChild("Enemies") or workspace:FindFirstChild("Mobs")
+end
+
+-- ESP Logic
+local function EnableESP()
+    local folder = getTitanFolder()
+    if not folder then return end
+    for _, titan in pairs(folder:GetChildren()) do
+        if titan:FindFirstChild("HumanoidRootPart") and not titan:FindFirstChild("_ESP") then
+            local gui = Instance.new("BillboardGui", titan.HumanoidRootPart)
+            gui.Name = "_ESP"
+            gui.Size = UDim2.new(0, 200, 0, 50)
+            gui.StudsOffset = Vector3.new(0, 4, 0)
+            gui.AlwaysOnTop = true
+
+            local label = Instance.new("TextLabel", gui)
+            label.Size = UDim2.new(1, 0, 1, 0)
+            label.BackgroundTransparency = 1
+            label.TextColor3 = Color3.new(1, 0, 0)
+            label.TextStrokeTransparency = 0
+            label.TextScaled = true
+            label.Font = Enum.Font.SourceSansBold
+            label.Text = "👹 " .. titan.Name
+        end
+    end
+end
+
+-- Autofarm Logic
+local function StartAutoFarm()
+    task.spawn(function()
+        while Farm_Enabled do
+            local folder = getTitanFolder()
+            if folder then
+                for _, titan in pairs(folder:GetChildren()) do
+                    local root = titan:FindFirstChild("HumanoidRootPart")
+                    local humanoid = titan:FindFirstChildOfClass("Humanoid")
+                    if root and humanoid and humanoid.Health > 0 then
+                        Character = LocalPlayer.Character
+                        if Character and Character:FindFirstChild("HumanoidRootPart") then
+                            Character.HumanoidRootPart.CFrame = root.CFrame * CFrame.new(0, 3, -5)
+                            local tool = Character:FindFirstChildOfClass("Tool")
+                            if tool then tool:Activate() end
+                            task.wait(0.3)
+                        end
+                    end
+                end
+            end
+            task.wait(0.2)
+        end
+    end)
+end
+
+-- Instant Reload / AutoRefill Logic (Bıçak Yenileme)
+local function InstantReloadKnives()
+    local tool = Character:FindFirstChildOfClass("Tool")
+    if tool and tool.Name == "Blade" then
+        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)  -- R tuşuna bas
+        task.wait(0.1)
+        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+    end
+end
+
+-- RightShift Toggle (hide/show GUI)
+local UserInputService = game:GetService("UserInputService")
+UserInputService.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.Keyboard and input.KeyCode == Enum.KeyCode.RightShift then
+        MenuVisible = not MenuVisible
+        Frame.Visible = MenuVisible
+    end
+end)
+
+-- Button Clicks
+ESPButton.MouseButton1Click:Connect(function()
+    ESP_Enabled = not ESP_Enabled
+    ESPButton.Text = ESP_Enabled and "✅ Titan ESP" or "👁️ Titan ESP"
+end)
+
+FarmButton.MouseButton1Click:Connect(function()
+    Farm_Enabled = not Farm_Enabled
+    FarmButton.Text = Farm_Enabled and "✅ AutoFarm" or "⚔️ AutoFarm"
+    if Farm_Enabled then StartAutoFarm() end
+end)
+
+ReloadButton.MouseButton1Click:Connect(function()
+    Reload_Enabled = not Reload_Enabled
+    ReloadButton.Text = Reload_Enabled and "✅ Auto Reload" or "♻️ Auto Reload"
+end)
+
+-- Background Loop - Instant Reload ve Refills
+RunService.RenderStepped:Connect(function()
+    if ESP_Enabled then EnableESP() end
+
+    -- Instant Reload Kontrolü
+    if Reload_Enabled then
+        Character = LocalPlayer.Character
+        if Character then
+            local tool = Character:FindFirstChildOfClass("Tool")
+            if tool and tool.Name == "Blade" then
+                -- Bıçak dayanıklılığı azsa, hemen reload yap
+                if tool:FindFirstChild("Durability") and tool.Durability.Value < 10 then
+                    InstantReloadKnives()  -- Instant reload
+                end
+            end
+        end
+    end
+end)
+
+-- Done. Load this via loadstring with game:HttpGet() for minimal script injection.
