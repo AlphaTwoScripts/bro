@@ -1,0 +1,104 @@
+-- Attack on Titan Revolution Auto Farm Script
+-- Author: ChatGPT for you :)
+-- Features: Hover, Auto Slash, Multi-Titan Detection, Nape Targeting, Auto Sword Switch
+
+if game.PlaceId ~= 13379349730 then
+    return warn("❌ ไม่ใช่แมพต่อสู้จริงของ AOT:R")
+end
+
+repeat wait() until game:IsLoaded()
+
+-- Notify
+game.StarterGui:SetCore("SendNotification", {
+    Title = "AOT:R Auto Farm",
+    Text = "Auto Farm พร้อมใช้งาน ✅",
+    Duration = 5
+})
+
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoidRootPart = character:WaitForChild("HumanoidRootPart")
+local swordBrokenCount = 0
+local maxBrokenSwords = 3
+
+-- Settings
+local hoverHeight = 45
+local attackCooldown = 0.6
+local attackRange = 100
+
+-- Hover System
+local BodyPosition = Instance.new("BodyPosition")
+BodyPosition.MaxForce = Vector3.new(1e5, 1e5, 1e5)
+BodyPosition.P = 1e4
+BodyPosition.D = 1000
+BodyPosition.Position = humanoidRootPart.Position
+BodyPosition.Parent = humanoidRootPart
+
+-- Function to check if Titan is attacking
+local function isTitanAttacking(titan)
+    local head = titan:FindFirstChild("Head")
+    if not head then return false end
+    local vel = head.Velocity.Magnitude
+    return vel > 20
+end
+
+-- Function to get Titans in workspace
+local function getTitans()
+    local titans = {}
+    for _, model in pairs(workspace:WaitForChild("Titans"):GetChildren()) do
+        if model:FindFirstChild("HumanoidRootPart") and model:FindFirstChild("Head") then
+            table.insert(titans, model)
+        end
+    end
+    return titans
+end
+
+-- Function to find back of the neck
+local function getNapePosition(titan)
+    local hrp = titan:FindFirstChild("HumanoidRootPart")
+    if hrp then
+        return hrp.Position - hrp.CFrame.LookVector * 2 + Vector3.new(0, hoverHeight, 0)
+    end
+end
+
+-- Function to slash
+local function slash()
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+    VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+end
+
+-- Function to auto equip sword if broken
+local function checkSword()
+    local inv = player.Backpack:GetChildren()
+    for _, item in pairs(inv) do
+        if item:IsA("Tool") and item.Name:lower():find("blade") then
+            item.Parent = character
+            return true
+        end
+    end
+    -- Switch weapon with R if nothing equipped
+    VirtualInputManager:SendKeyEvent(true, "R", false, game)
+    wait(0.2)
+    VirtualInputManager:SendKeyEvent(false, "R", false, game)
+end
+
+-- Main loop
+task.spawn(function()
+    while task.wait(attackCooldown) do
+        local titans = getTitans()
+        for _, titan in pairs(titans) do
+            if not isTitanAttacking(titan) then
+                local napePos = getNapePosition(titan)
+                if napePos and (humanoidRootPart.Position - napePos).Magnitude <= attackRange then
+                    BodyPosition.Position = napePos
+                    checkSword()
+                    slash()
+                end
+            end
+        end
+    end
+end)
