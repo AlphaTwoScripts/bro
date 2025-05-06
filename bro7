@@ -1,0 +1,1348 @@
+
+local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
+local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
+local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+
+local Players = game:GetService("Players")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local http = game:GetService("HttpService")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local LocalPlayer = Players.LocalPlayer
+
+-- Get current place ID to determine which features to show
+local CurrentPlaceId = game.PlaceId
+print("Current Place ID: " .. CurrentPlaceId)
+local isInMainMenu = (CurrentPlaceId == 13379208636)
+
+-- Discord webhook URL for sending rewards information
+local url = "https://discord.com/api/webhooks/1364070882397519872/sBJRDke8Hjk0R5K1aJz3Pfekksv6kuSosfqyftyxRPyuCoVvJT7TlVw6rLeCKnaPALR5"
+
+-- Function to send messages to Discord webhook
+local function sendMessage(msg)
+    local data = {
+        ["content"] = msg
+    }
+    local actual = http:JSONEncode(data)
+    local success, response = pcall(function()
+        request({Url = url, Method = "POST", Body = actual, Headers = {["content-type"] = "application/json"}})
+    end)
+    if success then
+        print("Message sent successfully!")
+    else
+        print("Failed to send message: "..tostring(response))
+    end
+end
+
+local Window = Fluent:CreateWindow({
+    Title = "Attack On Titan Revolution " .. Fluent.Version,
+    SubTitle = "by Ahjin",
+    TabWidth = 160,
+    Size = UDim2.fromOffset(580, 460),
+    Acrylic = true,
+    Theme = "Dark",
+    MinimizeKey = Enum.KeyCode.LeftControl
+})
+
+-- Create all tabs regardless of game state
+local Tabs = {
+    Features = Window:AddTab({ Title = "Features", Icon = "rocket" }),
+	Teleport = Window:AddTab({ Title = "Teleport", Icon = "map-pin" }),
+    Tracker = Window:AddTab({ Title = "Rewards Tracker", Icon = "eye" }),
+    Visual = Window:AddTab({ Title = "Visual", Icon = "palette" }),
+    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+}
+
+local Options = Fluent.Options
+
+-- Welcome notification
+Fluent:Notify({
+    Title = "AOT:R Autofarm",
+    Content = "Script has been loaded successfully. Current Place ID: " .. CurrentPlaceId,
+    Duration = 5
+})
+
+-- Function for the Nape Extender feature
+local function extendNape()
+    while Options.NapeExtender.Value do
+        if not Options.NapeExtender.Value then return end
+        
+        -- Check if Titans folder exists
+        local titansFolder = game:GetService("Workspace"):FindFirstChild("Titans")
+        if not titansFolder then
+            print("Titans folder not found. Wait and retry...")
+            wait(1)
+            continue
+        end
+        
+        for i, titans in pairs(titansFolder:GetChildren()) do
+            local stepone = titans:FindFirstChild("Hitboxes")
+            if stepone then
+                local steptwo = stepone:FindFirstChild("Hit")
+                if steptwo then
+                    local final = steptwo:FindFirstChild("Nape")
+                    if final then
+                        final.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
+                        final.Transparency = 0.85
+                        final.CanCollide = false
+                        print("Extended Nape For:", titans.Name)
+                    end
+                end
+            end
+        end
+        wait(0.05)
+    end
+end
+
+-- Add features to the Features tab based on game state
+if not isInMainMenu then
+    -- Add Nape Extender toggle
+    local NapeToggle = Tabs.Features:AddToggle("NapeExtender", {
+        Title = "Nape Extender",
+        Default = false,
+        Description = "Enlarges titan nape hitboxes for easier hits",
+        Callback = function(Value)
+            if Value then
+                task.spawn(extendNape)
+            end
+        end
+    })
+
+    -- Add the autofarm toggle
+    local AutofarmToggle = Tabs.Features:AddToggle("Autofarm", {
+        Title = "OP Autofarm",
+        Default = false,
+        Description = "Required Steel, Trust skills",
+        Callback = function(Value)
+            if Value then
+                local Players = game:GetService("Players")
+                local workspace = game:GetService("Workspace")
+                local VIP = game:GetService("VirtualInputManager")
+                local ReplicatedStorage = game:GetService("ReplicatedStorage")
+                local RunService = game:GetService("RunService")
+
+                local player = Players.LocalPlayer
+                local character = player.Character or player.CharacterAdded:Wait()
+                local rootPart = character:WaitForChild("HumanoidRootPart")
+
+                -- Enlarge titan hitboxes
+                local titans = workspace.Titans:GetChildren()
+                for _, titan in ipairs(titans) do
+                    local Hitboxes = titan:FindFirstChild("Hitboxes")
+                    if Hitboxes then
+                        local Hit = Hitboxes:FindFirstChild("Hit")
+                        if Hit then
+                            local Nape = Hit:FindFirstChild("Nape")
+                            if Nape then
+                                print("Found Nape")
+                                
+                                -- Resize the Nape hitbox
+                                Nape.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
+                                
+                                -- Teleport Nape to 5 studs in front of the player's character
+                                local frontOffset = rootPart.CFrame.LookVector * 5
+                                Nape.Position = rootPart.Position + frontOffset
+                                
+                                -- Ensure Nape is anchored
+                                Nape.Anchored = true
+                            end
+                        end
+                    end
+                end
+
+                -- The fixed position you want to lock the player to
+                local fixedPosition = Vector3.new(rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
+                
+                -- Allowable vertical movement range
+                local verticalRange = 5
+                
+                -- Function to keep the player in place
+                local function keepPlayerInPlace()
+                    local yPos = math.clamp(rootPart.Position.Y, fixedPosition.Y - verticalRange, fixedPosition.Y + verticalRange)
+                    rootPart.CFrame = CFrame.new(fixedPosition.X, yPos, fixedPosition.Z)
+                end
+                
+                -- Run the function on every frame
+                local connectionRef = RunService.RenderStepped:Connect(keepPlayerInPlace)
+                
+                -- Simulate key event for the first skill
+                VIP:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+                task.wait(0.1)
+                
+                -- Find Thrust and Steel parts and modify them
+                local Thrust = workspace:FindFirstChild("HakerOreoScary_Thrust")
+                local Steel = workspace:FindFirstChild("HakerOreoScary_Steel")
+                
+                if Thrust then
+                    Thrust.Size = Vector3.new(1999, 1999, 1999)
+                    Thrust.CanCollide = false
+                end
+                
+                task.wait(2)
+                
+                -- Simulate key event for the second skill
+                VIP:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
+                task.wait(0.1)
+                
+                if Steel then
+                    Steel.Size = Vector3.new(1999, 1999, 1999)
+                    Steel.CanCollide = false
+                end
+                
+                -- Path to the Slay object
+                local Slay = ReplicatedStorage.Objectives:WaitForChild("Slay")
+                
+                -- Requirement attribute
+                local requirement = Slay:GetAttribute("Requirement")
+                
+                -- Wait for Slay.Value to meet the requirement before proceeding with key events
+                while Slay.Value ~= requirement do
+                    task.wait(0.1)
+                    -- Check if toggle was turned off
+                    if not Options.Autofarm.Value then
+                        if connectionRef then
+                            connectionRef:Disconnect()
+                        end
+                        return
+                    end
+                end
+                
+                task.wait(1)
+                
+                VIP:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
+                task.wait(0.1)
+                VIP:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
+                task.wait(0.1)
+                VIP:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
+                task.wait(0.1)
+                VIP:SendKeyEvent(true, Enum.KeyCode.Return, false, game) -- Key down
+                VIP:SendKeyEvent(false, Enum.KeyCode.Return, false, game) -- Key up
+            end
+        end
+    })
+
+    -- Add a hitbox size slider to Features tab
+    local HitboxSlider = Tabs.Features:AddSlider("HitboxSize", {
+        Title = "Hitbox Size",
+        Description = "Adjust the size of titan hitboxes",
+        Default = 250,
+        Min = 10,
+        Max = 500,
+        Rounding = 0,
+        Callback = function(Value)
+            -- This value will be used in the Nape Extender function
+            print("Hitbox size set to:", Value)
+        end
+    })
+
+	local AutoEscapeToggle = Tabs.Features:AddToggle("AutoEscapeEnabled", {
+    Title = "Auto Escape",
+    Default = false,
+    Description = "Automatically escapes from grabs and titan hands",
+    Callback = function(Value)
+        -- Auto Escape Script
+        local VIM = game:GetService("VirtualInputManager")
+        getgenv().autoescape = Value
+        
+        if Value then
+            -- Create a new connection when enabled
+            _G.AutoEscapeConnection = task.spawn(function()
+                while task.wait(0.3) do 
+                    if not getgenv().autoescape then break end 
+                    for i,v in pairs(game:GetService("Players").LocalPlayer.PlayerGui.Interface.Buttons:GetChildren()) do 
+                        if v ~= nil then 
+                            VIM:SendKeyEvent(true, string.sub(tostring(v), 1, 1), false, game) 
+                        end 
+                    end
+                end
+            end)
+        else
+            -- Stop the loop when disabled
+            getgenv().autoescape = false
+            if _G.AutoEscapeConnection then
+                task.cancel(_G.AutoEscapeConnection)
+                _G.AutoEscapeConnection = nil
+            end
+        end
+    end
+})
+
+-- Information paragraph for Features tab
+    Tabs.Features:AddParagraph({
+        Title = "Information",
+        Content = "auto-kills titans by making their weak spots bigger and attacking for you."
+    })
+else
+
+    -- Add a message for Features tab when in main menu
+    Tabs.Features:AddParagraph({
+        Title = "Combat Features Unavailable",
+        Content = "Combat features are only available during missions. Please join a mission to access Nape Extender, Autofarm, and other combat features."
+    })
+end
+
+-- First create a dropdown for the slashing mode
+local SlashModeDropdown = Tabs.Features:AddDropdown("SlashMode", {
+    Title = "Farm Mode",
+    Values = {"Risky", "Safe", "Normal"},
+    Default = "Normal",
+    Multi = false,
+    Description = "Your Choice"
+})
+
+-- Then create the toggle with the dropdown reference
+local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
+    Title = "Slash Through Hitbox",
+    Default = false,
+    Description = "Slashes through titan hitbox with M1 spam",
+    Callback = function(Value)
+        _G.SlashThroughHitboxEnabled = Value -- Global variable to track state
+        
+        if Value then
+            -- Services
+            local Players = game:GetService("Players")
+            local Workspace = game:GetService("Workspace")
+            local VIM = game:GetService("VirtualInputManager")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local RunService = game:GetService("RunService")
+            local TweenService = game:GetService("TweenService")
+
+            -- Get the current slash mode
+            local currentSlashMode = SlashModeDropdown.Value
+
+            -- Configuration
+            local Options = {
+                AutoFarm = { Value = true },
+                NapeExtender = { Value = true },
+                HitboxSize = { Value = 25 },
+                MoveSpeed = 120,
+                SlashSpeed = 130,
+                SlashDistance = 15,
+                AttackDuration = 4,
+                WaitAfterCompletion = 2.5,
+                ClickOffsetX = 50,
+                ClickOffsetY = 60,
+                AttackHeight = { Value = 300 } -- Fixed at 300 studs
+            }
+
+            -- Adjust settings based on selected mode
+            if currentSlashMode == "Risky" then
+                -- Risky mode: Faster movement, higher attack speed
+                Options.MoveSpeed = 300
+                Options.SlashSpeed = 150
+            elseif currentSlashMode == "Safe" then
+                -- Safe mode: Slower movement, more careful
+                Options.MoveSpeed = 70    -- Slower movement
+                Options.SlashSpeed = 90   -- Slower slashing
+                Options.AttackDuration = 5 -- Longer attacks for more precision
+            end
+
+            -- References
+            local player = Players.LocalPlayer
+            local character = player.Character or player.CharacterAdded:Wait()
+            local hrp = character:WaitForChild("HumanoidRootPart")
+            
+            -- Connections for cleanup
+            local connections = {}
+            local currentTween = nil
+            local isSlashing = false
+            local currentTargetTitan = nil  -- Track the current titan being targeted
+            local lastGroundY = hrp.Position.Y -- Track last ground Y position
+
+            -- Function to check if a titan is alive and valid
+            local function isTitanValid(titan)
+                return titan and 
+                       titan:IsDescendantOf(Workspace) and 
+                       titan:FindFirstChild("Humanoid") and 
+                       titan.Humanoid.Health > 0
+            end
+
+            -- This function will continuously check if the current target titan is still valid
+            local function setupTitanMonitor()
+                local connection = RunService.Heartbeat:Connect(function()
+                    if currentTargetTitan and not isTitanValid(currentTargetTitan) then
+                        -- Titan died or became invalid, force stop slashing
+                        isSlashing = false
+                        currentTargetTitan = nil
+                    end
+                end)
+                table.insert(connections, connection)
+            end
+
+            -- Movement function with fixed height implementation
+            local function moveToPosition(targetPos, titan)
+                if not isTitanValid(titan) then
+                    return false
+                end
+                
+                -- Always set the y-position to the fixed height of 300
+                targetPos = Vector3.new(targetPos.X, Options.AttackHeight.Value, targetPos.Z)
+
+                -- Normal movement for all modes
+                local distance = (targetPos - hrp.Position).Magnitude
+                local duration = distance / Options.MoveSpeed
+                local startTime = tick()
+                
+                local startPos = hrp.Position
+                
+                while tick() - startTime < duration and _G.SlashThroughHitboxEnabled do
+                    -- Check if titan is still valid during movement
+                    if not isTitanValid(titan) then
+                        return false
+                    end
+                    
+                    local alpha = (tick() - startTime) / duration
+                    alpha = math.min(alpha, 1)
+                    
+                    local newPos = startPos:Lerp(targetPos, alpha)
+                    hrp.CFrame = CFrame.new(newPos)
+                    
+                    task.wait()
+                end
+                
+                return _G.SlashThroughHitboxEnabled
+            end
+            
+            -- Slash function with fixed height implementation
+            local function moveSlash(startPos, endPos, titan)
+                if not isTitanValid(titan) then
+                    return false
+                end
+                
+                -- Ensure both start and end positions are at fixed height of 300
+                startPos = Vector3.new(startPos.X, Options.AttackHeight.Value, startPos.Z)
+                endPos = Vector3.new(endPos.X, Options.AttackHeight.Value, endPos.Z)
+                
+                -- Normal movement for all modes
+                local distance = (endPos - startPos).Magnitude
+                local duration = distance / Options.SlashSpeed
+                local startTime = tick()
+                
+                while tick() - startTime < duration and _G.SlashThroughHitboxEnabled do
+                    -- Check if titan is still valid during slash
+                    if not isTitanValid(titan) then
+                        return false
+                    end
+                    
+                    local alpha = (tick() - startTime) / duration
+                    alpha = math.min(alpha, 1)
+                    
+                    local newPos = startPos:Lerp(endPos, alpha)
+                    hrp.CFrame = CFrame.new(newPos)
+                    
+                    task.wait()
+                end
+                
+                return _G.SlashThroughHitboxEnabled
+            end
+            
+            -- Slash through nape function with improved titan validity checks
+            -- and fixed height implementation
+            local function slashThroughNape(napePart, titan)
+                if isSlashing then return true end
+                
+                -- Don't start slashing if titan is already dead
+                if not isTitanValid(titan) then
+                    return false
+                end
+                
+                isSlashing = true
+                currentTargetTitan = titan  -- Set the current target titan
+                
+                local startTime = tick()
+                local slashCount = 0
+                local slashDirections = {
+                    {Vector3.new(-Options.SlashDistance, 0, 0), Vector3.new(Options.SlashDistance, 0, 0)},
+                    {Vector3.new(0, -Options.SlashDistance, 0), Vector3.new(0, Options.SlashDistance, 0)},
+                    {Vector3.new(0, 0, -Options.SlashDistance), Vector3.new(0, 0, Options.SlashDistance)},
+                    {Vector3.new(-Options.SlashDistance, -Options.SlashDistance, 0), Vector3.new(Options.SlashDistance, Options.SlashDistance, 0)},
+                    {Vector3.new(-Options.SlashDistance, 0, -Options.SlashDistance), Vector3.new(Options.SlashDistance, 0, Options.SlashDistance)}
+                }
+                
+                -- For Safe mode, use fewer slice directions to be more methodical
+                if currentSlashMode == "Safe" then
+                    -- Use only the most reliable slash directions
+                    slashDirections = {
+                        {Vector3.new(-Options.SlashDistance, 0, 0), Vector3.new(Options.SlashDistance, 0, 0)},
+                        {Vector3.new(0, -Options.SlashDistance, 0), Vector3.new(0, Options.SlashDistance, 0)}
+                    }
+                end
+                
+                -- This coroutine handles the slashing
+                local slashCoroutine = task.spawn(function()
+                    while (tick() - startTime) < Options.AttackDuration and _G.SlashThroughHitboxEnabled and isSlashing do
+                        -- Immediately exit if titan is no longer valid
+                        if not isTitanValid(titan) then
+                            isSlashing = false
+                            currentTargetTitan = nil
+                            break
+                        end
+                        
+                        local currentDirection = (slashCount % #slashDirections) + 1
+                        local dir = slashDirections[currentDirection]
+                        
+                        local napePos = napePart.Position
+                        -- Always adjust for fixed height of 300
+                        napePos = Vector3.new(napePos.X, Options.AttackHeight.Value, napePos.Z)
+                        
+                        local startPos = napePos + dir[1]
+                        local endPos = napePos + dir[2]
+                        
+                        local slashSuccess = moveSlash(startPos, endPos, titan)
+                        if not slashSuccess then
+                            isSlashing = false
+                            currentTargetTitan = nil
+                            break
+                        end
+                        
+                        slashSuccess = moveSlash(endPos, startPos, titan)
+                        if not slashSuccess then
+                            isSlashing = false
+                            currentTargetTitan = nil
+                            break
+                        end
+                        
+                        slashCount = slashCount + 1
+                    end
+                    
+                    isSlashing = false
+                    currentTargetTitan = nil
+                end)
+                
+                -- Wait for slashing to complete or for titan to become invalid
+                local waitEndTime = tick() + Options.AttackDuration
+                while tick() < waitEndTime and _G.SlashThroughHitboxEnabled and isSlashing do
+                    -- Exit early if titan becomes invalid
+                    if not isTitanValid(titan) then
+                        isSlashing = false
+                        currentTargetTitan = nil
+                        break
+                    end
+                    
+                    task.wait(0.1)
+                    if not _G.SlashThroughHitboxEnabled or not isSlashing then
+                        break
+                    end
+                end
+                
+                task.wait(0.2)
+                isSlashing = false
+                currentTargetTitan = nil
+                
+                return _G.SlashThroughHitboxEnabled
+            end
+
+            -- Modified NoClip function that still prevents falling
+            local function enableNoClip()
+                -- For fixed height, update lastGroundY to match our desired height
+                lastGroundY = Options.AttackHeight.Value - 3 -- Set a reference point below our fixed height
+                
+                -- Disable collision for parts
+                local connection = RunService.Stepped:Connect(function()
+                    if character and character:FindFirstChild("Humanoid") then
+                        for _, part in pairs(character:GetDescendants()) do
+                            if part:IsA("BasePart") then
+                                part.CanCollide = false
+                            end
+                        end
+                    end
+                end)
+                table.insert(connections, connection)
+                
+                -- Height correction for fixed height
+                local heightCorrectionConnection = RunService.Heartbeat:Connect(function()
+                    if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+                    
+                    -- If we're not at the right height, correct it
+                    if math.abs(hrp.Position.Y - Options.AttackHeight.Value) > 5 then
+                        hrp.CFrame = CFrame.new(
+                            hrp.Position.X, 
+                            Options.AttackHeight.Value, 
+                            hrp.Position.Z
+                        ) * CFrame.Angles(hrp.CFrame:ToEulerAnglesXYZ())
+                    end
+                end)
+                table.insert(connections, heightCorrectionConnection)
+            end
+            
+            -- Setup M1 auto-clicker with 1 click per second
+            _G.M1SlashFarm = true
+            task.spawn(function()
+                while _G.M1SlashFarm and _G.SlashThroughHitboxEnabled do
+                    VIM:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+                    task.wait(0.1)  -- Short press
+                    VIM:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+                    task.wait(0.9)  -- Wait for remainder of second
+                end
+            end)
+            
+            -- Check mission completion and auto-retry with rate limiting
+            local function checkMissionCompletion()
+                local lastRetryTime = 0
+                local retryAttempted = false
+                local retryDelay = 10 -- Minimum seconds between retry attempts
+                
+                local connection = RunService.Heartbeat:Connect(function()
+                    if not _G.SlashThroughHitboxEnabled then return end
+                    
+                    -- Only check every 3 seconds to reduce frequency
+                    if tick() % 3 > 0.1 then return end
+                    
+                    local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
+                    
+                    if Slay then
+                        local value = Slay.Value
+                        local requirement = Slay:GetAttribute("Requirement")
+                        
+                        if value and requirement and value >= requirement then
+                            -- Prevent spamming retry
+                            if retryAttempted then return end
+                            
+                            -- Rate limit retry attempts
+                            if tick() - lastRetryTime < retryDelay then return end
+                            
+                            retryAttempted = true
+                            lastRetryTime = tick()
+                            
+                            task.wait(Options.WaitAfterCompletion)
+                            
+                            local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+                            if not playerGui then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local interface = playerGui:FindFirstChild("Interface")
+                            if not interface then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local rewards = interface:FindFirstChild("Rewards")
+                            if not rewards then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local main = rewards:FindFirstChild("Main")
+                            if not main then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local info = main:FindFirstChild("Info")
+                            if not info then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local mainInfo = info:FindFirstChild("Main")
+                            if not mainInfo then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local buttons = mainInfo:FindFirstChild("Buttons")
+                            if not buttons then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local retryButton = buttons:FindFirstChild("Retry")
+                            
+                            if retryButton then
+                                local buttonPos = retryButton.AbsolutePosition
+                                local buttonSize = retryButton.AbsoluteSize
+                                
+                                local clickX = buttonPos.X + (buttonSize.X / 2) + Options.ClickOffsetX
+                                local clickY = buttonPos.Y + (buttonSize.Y / 2) + Options.ClickOffsetY
+                                
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
+                                task.wait(0.1)
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
+                            end
+                            
+                            -- Reset retry flag after 5 seconds
+                            task.delay(5, function()
+                                retryAttempted = false
+                            end)
+                        end
+                    end
+                end)
+                
+                table.insert(connections, connection)
+            end
+
+            -- Main auto-farm loop with improved titan targeting and fixed height support
+            local function autoFarm()
+                while not Workspace:FindFirstChild("Titans") do
+                    task.wait(1)
+                    if not _G.SlashThroughHitboxEnabled then return end
+                end
+
+                while _G.SlashThroughHitboxEnabled and Options.AutoFarm.Value do
+                    local titansFolder = Workspace:FindFirstChild("Titans")
+                    if not titansFolder then
+                        task.wait(1)
+                        continue
+                    end
+                    
+                    -- Make sure we're not already slashing
+                    if isSlashing then
+                        task.wait(0.5)
+                        continue
+                    end
+                    
+                    local titanList = {}
+                    for _, titan in ipairs(titansFolder:GetChildren()) do
+                        if not titan:IsA("Model") then continue end
+                        
+                        -- Important fix: Check titan is alive
+                        if not isTitanValid(titan) then continue end
+                        
+                        local hitboxes = titan:FindFirstChild("Hitboxes")
+                        local hit = hitboxes and hitboxes:FindFirstChild("Hit")
+                        local nape = hit and hit:FindFirstChild("Nape")
+                        
+                        if nape then
+                            table.insert(titanList, { titan = titan, nape = nape })
+                        end
+                    end
+                    
+                    -- Sort titans by distance (only X and Z, not Y since we're at fixed height)
+                    table.sort(titanList, function(a, b)
+                        local aPos = Vector3.new(a.nape.Position.X, 0, a.nape.Position.Z)
+                        local bPos = Vector3.new(b.nape.Position.X, 0, b.nape.Position.Z)
+                        local playerPos = Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
+                        return (aPos - playerPos).Magnitude < (bPos - playerPos).Magnitude
+                    end)
+
+                    local targetedTitan = false
+                    for _, entry in ipairs(titanList) do
+                        if not _G.SlashThroughHitboxEnabled then break end
+                        
+                        local titan = entry.titan
+                        local nape = entry.nape
+
+                        -- Check again that titan is still valid before targeting
+                        if not isTitanValid(titan) then continue end
+                        
+                        targetedTitan = true
+                        currentTargetTitan = titan  -- Set current target titan
+
+                        if Options.NapeExtender.Value then
+                            -- Create a tall hitbox that reaches the fixed height
+                            -- Get the titan's base position
+                            local titanBase = nape.Position
+                            
+                            -- Calculate the height needed to reach from titan to our fixed height
+                            local heightDifference = math.abs(Options.AttackHeight.Value - titanBase.Y)
+                            
+                            -- Make the nape hitbox tall enough to reach the player
+                            nape.Size = Vector3.new(
+                                Options.HitboxSize.Value,  -- Width X
+                                heightDifference + 60,    -- Height Y (tall enough to reach)
+                                Options.HitboxSize.Value   -- Width Z
+                            )
+                            
+                            -- Position the nape so it extends from titan up to our height
+                            local midPoint = (titanBase.Y + Options.AttackHeight.Value) / 2
+                            nape.Position = Vector3.new(
+                                titanBase.X,
+                                midPoint,  -- Middle of the hitbox between titan and player height
+                                titanBase.Z
+                            )
+                            
+                            nape.Transparency = 1
+                            nape.CanCollide = false
+                        end
+
+                        local targetPos = Vector3.new(nape.Position.X, Options.AttackHeight.Value, nape.Position.Z)
+                        
+                        local success = moveToPosition(targetPos, titan)
+                        if not success then
+                            currentTargetTitan = nil
+                            break
+                        end
+                        
+                        -- Pass titan instance to slashThroughNape
+                        local slashSuccess = slashThroughNape(nape, titan)
+                        if not slashSuccess then
+                            currentTargetTitan = nil
+                            break
+                        end
+                    end
+                    
+                    currentTargetTitan = nil
+                    
+                    if not targetedTitan then
+                        task.wait(1)
+                    else
+                        task.wait(0.05)
+                    end
+                end
+            end
+
+            -- Cleanup function
+            local function cleanup()
+                isSlashing = false
+                currentTargetTitan = nil
+                
+                for _, connection in pairs(connections) do
+                    if connection and connection.Connected then
+                        connection:Disconnect()
+                    end
+                end
+                
+                if currentTween then
+                    currentTween:Cancel()
+                    currentTween = nil
+                end
+                
+                _G.M1SlashFarm = false
+            end
+
+            -- Setup cleanup on toggle off
+            local toggleOffConnection = RunService.Heartbeat:Connect(function()
+                if not _G.SlashThroughHitboxEnabled then
+                    cleanup()
+                    toggleOffConnection:Disconnect()
+                end
+            end)
+            table.insert(connections, toggleOffConnection)
+
+            -- Run farm
+            enableNoClip()
+            checkMissionCompletion()
+            setupTitanMonitor()  -- Add titan monitor
+            
+            -- Setup cleanup on character respawn
+            local characterConnection = player.CharacterAdded:Connect(function(newCharacter)
+                character = newCharacter
+                hrp = character:WaitForChild("HumanoidRootPart")
+                task.wait(1)
+                enableNoClip()
+            end)
+            table.insert(connections, characterConnection)
+            
+            -- Start farming
+            task.spawn(autoFarm)
+            
+        else
+            -- Disable farm when toggle is turned off
+            _G.SlashThroughHitboxEnabled = false
+            _G.M1SlashFarm = false
+        end
+    end
+})
+
+-- Add event listener to update when dropdown changes while toggle is active
+SlashModeDropdown:OnChanged(function()
+    if _G.SlashThroughHitboxEnabled then
+        -- Turn off and back on to apply new settings
+        SlashThroughHitboxToggle:Set(false)
+        task.wait(0.5)
+        SlashThroughHitboxToggle:Set(true)
+    end
+end)
+
+-- Add Auto Blade Reload Toggle to Features Tab (IMPROVED VERSION USING DIRECT REMOTES)
+local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
+    Title = "Auto Blade Reload",
+    Default = false,
+    Description = "Automatically reloads blades when they break (using server remotes)",
+    Callback = function(Value)
+        if Value then
+            -- Variables for blade reload
+            local Players = game:GetService("Players")
+            local player = Players.LocalPlayer
+            local RunService = game:GetService("RunService")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            
+            -- Setup remote function
+            local remote = ReplicatedStorage:WaitForChild("Assets"):WaitForChild("Remotes"):WaitForChild("GET")
+            
+            -- Variables for timing and state
+            local lastReloadTime = 0
+            local RELOAD_COOLDOWN = 1 -- Seconds to wait between reload attempts
+            local isReloading = false
+            
+            -- Direct server reload function (more reliable than key simulation)
+            local function reloadBladesViaRemote()
+                local currentTime = tick()
+                
+                -- Check cooldown and prevent spam
+                if currentTime - lastReloadTime < RELOAD_COOLDOWN then
+                    return
+                end
+                
+                -- Set reloading state to prevent multiple simultaneous calls
+                if isReloading then return end
+                isReloading = true
+                
+                -- Call server remote directly
+                print("Reloading blades via remote...")
+                pcall(function()
+                    remote:InvokeServer("Blades", "Reload")
+                end)
+                
+                -- Update last reload time
+                lastReloadTime = currentTime
+                isReloading = false
+            end
+            
+            -- Fallback function using key simulation (in case remote fails)
+            local function fallbackKeyReload()
+                local currentTime = tick()
+                
+                -- Check cooldown
+                if currentTime - lastReloadTime < RELOAD_COOLDOWN then
+                    return
+                end
+                
+                -- Use VirtualInputManager as fallback
+                local VirtualInputManager = game:GetService("VirtualInputManager")
+                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+                task.wait(0.05)
+                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+                
+                -- Update last reload time
+                lastReloadTime = currentTime
+            end
+            
+            -- Main monitoring loop for blade transparency
+            local reloadConnection = RunService.Heartbeat:Connect(function()
+                if not Options.BladeReload.Value then return end
+                
+                -- Check if character exists
+                local character = workspace.Characters:FindFirstChild(player.Name)
+                if not character then return end
+                
+                local rig = character:FindFirstChild("Rig_"..player.Name)
+                if not rig then return end
+                
+                local rightHand = rig:FindFirstChild("RightHand")
+                local leftHand = rig:FindFirstChild("LeftHand")
+                
+                -- Check if both hands exist
+                if not (rightHand and leftHand) then return end
+                
+                -- Find the blade objects in the hands
+                local rightBlade = nil
+                local leftBlade = nil
+                
+                for _, item in pairs(rightHand:GetChildren()) do
+                    if item:IsA("BasePart") and item.Name:find("Blade") then
+                        rightBlade = item
+                        break
+                    end
+                end
+                
+                for _, item in pairs(leftHand:GetChildren()) do
+                    if item:IsA("BasePart") and item.Name:find("Blade") then
+                        leftBlade = item
+                        break
+                    end
+                end
+                
+                -- Check transparency of either blade
+                if (rightBlade and rightBlade.Transparency >= 0.9) or 
+                   (leftBlade and leftBlade.Transparency >= 0.9) then
+                    -- Try remote first, with fallback to key press
+                    local success = pcall(function()
+                        reloadBladesViaRemote()
+                    end)
+                    
+                    -- If remote call failed, use key press as fallback
+                    if not success then
+                        print("Remote reload failed, using fallback key press")
+                        fallbackKeyReload()
+                    end
+                end
+            end)
+            
+            -- Cleanup function
+            task.spawn(function()
+                while Options.BladeReload.Value do task.wait(0.1) end
+                
+                if reloadConnection then
+                    reloadConnection:Disconnect()
+                end
+            end)
+            
+            Fluent:Notify({
+                Title = "Auto Blade Reload Enabled",
+                Content = "Will automatically reload blades when they break (using server remotes)",
+                Duration = 3
+            })
+        end
+    end
+})
+
+-- Add features to the Visual tab - some are conditional
+if not isInMainMenu then
+    -- Add Titan ESP toggle to the Visual tab
+    local ESPToggle = Tabs.Visual:AddToggle("TitanESP", {
+        Title = "Titan ESP",
+        Default = false,
+        Description = "Highlights all titans for better visibility",
+        Callback = function(Value)
+            if Value then
+                local titansFolder = game.Workspace:FindFirstChild("Titans")
+                if not titansFolder then
+                    Fluent:Notify({
+                        Title = "Error",
+                        Content = "Titans folder not found. Are you in a mission?",
+                        Duration = 3
+                    })
+                    return
+                end
+                
+                for _, titan in pairs(titansFolder:GetChildren()) do
+                    -- Check if highlight already exists
+                    if not titan:FindFirstChild("Highlight") then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Parent = titan
+                        highlight.Archivable = true
+                        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                        highlight.Enabled = true
+                        highlight.FillColor = Color3.fromRGB(255, 0, 4)
+                        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        highlight.FillTransparency = 0.5
+                        highlight.OutlineTransparency = 0
+                    end
+                end
+                
+                -- Connect to ChildAdded to highlight new titans
+                game.Workspace.Titans.ChildAdded:Connect(function(titan)
+                    if Options.TitanESP.Value then
+                        local highlight = Instance.new("Highlight")
+                        highlight.Parent = titan
+                        highlight.Archivable = true
+                        highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+                        highlight.Enabled = true
+                        highlight.FillColor = Color3.fromRGB(255, 0, 4)
+                        highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+                        highlight.FillTransparency = 0.5
+                        highlight.OutlineTransparency = 0
+                    end
+                end)
+            else
+                -- Remove highlights when toggled off
+                local titansFolder = game.Workspace:FindFirstChild("Titans")
+                if titansFolder then
+                    for _, titan in pairs(titansFolder:GetChildren()) do
+                        local highlight = titan:FindFirstChild("Highlight")
+                        if highlight then
+                            highlight:Destroy()
+                        end
+                    end
+                end
+            end
+        end
+    })
+
+    -- Add ESP color picker for titan highlights
+    local ESPColorPicker = Tabs.Visual:AddColorpicker("ESPColor", {
+        Title = "ESP Color",
+        Default = Color3.fromRGB(255, 0, 4),
+        Description = "Choose the color for titan ESP",
+        Callback = function(Value)
+            local titansFolder = game.Workspace:FindFirstChild("Titans")
+            if titansFolder then
+                for _, titan in pairs(titansFolder:GetChildren()) do
+                    local highlight = titan:FindFirstChild("Highlight")
+                    if highlight then
+                        highlight.FillColor = Value
+                    end
+                end
+            end
+        end
+    })
+else
+     -- Add a message for Visual tab when in main menu
+    Tabs.Visual:AddParagraph({
+        Title = "Titan ESP Unavailable",
+        Content = "Titan ESP features are only available during missions. Please join a mission to access these features."
+   })
+end
+
+-- Add game optimization toggle (available everywhere)
+local OptimizeToggle = Tabs.Visual:AddToggle("OptimizeGame", {
+    Title = "Optimize Game",
+    Default = false,
+    Description = "Reduces graphics for better performance (not reversible within session)",
+    Callback = function(Value)
+        if Value then
+            local decalsyeeted = true
+            local g = game
+            local w = g.Workspace
+            local l = g.Lighting
+            local t = w.Terrain
+            
+            t.WaterWaveSize = 0
+            t.WaterWaveSpeed = 0
+            t.WaterReflectance = 0
+            t.WaterTransparency = 0
+            l.GlobalShadows = false
+            l.FogEnd = 9e9
+            l.Brightness = 0
+            settings().Rendering.QualityLevel = "Level01"
+            
+            for i, v in pairs(g:GetDescendants()) do
+                if v:IsA("Part") or v:IsA("Union") or v:IsA("CornerWedgePart") or v:IsA("TrussPart") then
+                    v.Material = Enum.Material.Plastic
+                    v.Reflectance = 0
+                elseif v:IsA("Decal") or v:IsA("Texture") and decalsyeeted then
+                    v.Transparency = 1
+                elseif v:IsA("ParticleEmitter") or v:IsA("Trail") then
+                    v.Lifetime = NumberRange.new(0)
+                elseif v:IsA("Explosion") then
+                    v.BlastPressure = 1
+                    v.BlastRadius = 1
+                elseif v:IsA("Fire") or v:IsA("SpotLight") or v:IsA("Smoke") then
+                    v.Enabled = false
+                elseif v:IsA("MeshPart") then
+                    v.Material = Enum.Material.Plastic
+                    v.Reflectance = 0
+                    v.TextureID = 10385902758728957
+                end
+            end
+            
+            for i, e in pairs(l:GetChildren()) do
+                if e:IsA("BlurEffect") or e:IsA("SunRaysEffect") or e:IsA("ColorCorrectionEffect") or e:IsA("BloomEffect") or e:IsA("DepthOfFieldEffect") then
+                    e.Enabled = false
+                end
+            end
+            
+            Fluent:Notify({
+                Title = "Game Optimized",
+                Content = "Graphics settings have been reduced for better performance",
+                Duration = 5
+            })
+        end
+    end
+})
+
+-- Information paragraph for Visual tab (shown everywhere)
+Tabs.Visual:AddParagraph({
+    Title = "Visual Options",
+    Content = "These options alter the game's appearance. The optimization option improves performance but reduces graphics quality."
+})
+
+-- Add features to the Tracker tab based on game state
+if not isInMainMenu then
+    -- Add the rewards tracker toggle to the Tracker tab
+    local RewardsToggle = Tabs.Tracker:AddToggle("RewardsTracker", {
+        Title = "Rewards Tracker",
+        Default = true,
+        Description = "Track and send rewards to Discord webhook",
+        Callback = function(Value)
+            if Value then
+                -- Create a new thread to avoid freezing the UI
+                task.spawn(function()
+                    local tracking = true
+                    
+                    -- Create a function to stop tracking when toggle is turned off
+                    local function checkToggleState()
+                        return Options.RewardsTracker.Value
+                    end
+                    
+                    while checkToggleState() do
+                        local LocalPlayer = Players.LocalPlayer
+                        local startgui = LocalPlayer:WaitForChild("PlayerGui")
+                        local interface = startgui:WaitForChild("Interface")
+                        local stepone = interface:WaitForChild("Rewards", 5)
+                        
+                        if not stepone then 
+                            print("Rewards UI not found")
+                            task.wait(1)
+                            continue
+                        end
+                        
+                        local steptwo = stepone:WaitForChild("Main", 2)
+                        if not steptwo then continue end
+                        
+                        local stepthree = steptwo:WaitForChild("Info", 2)
+                        if not stepthree then continue end
+                        
+                        local stepfour = stepthree:WaitForChild("Main", 2)
+                        if not stepfour then continue end
+                        
+                        local stepfive = stepfour:WaitForChild("Items", 2)
+                        if not stepfive then continue end
+                        
+                        local slay = ReplicatedStorage:WaitForChild("Objectives"):WaitForChild("Slay", 2)
+                        
+                        if slay then
+                            local value = slay:GetAttribute("Value") or slay.Value
+                            local requirement = slay:GetAttribute("Requirement")
+                            
+                            Fluent:Notify({
+                                Title = "Tracking Progress",
+                                Content = "Current: " .. tostring(value) .. " / Required: " .. tostring(requirement),
+                                Duration = 3
+                            })
+                            
+                            if value and requirement and value >= requirement then
+                                Fluent:Notify({
+                                    Title = "Rewards Available!",
+                                    Content = "Requirement met. Collecting rewards information.",
+                                    Duration = 5
+                                })
+                                
+                                if stepfive then
+                                    sendMessage("**REWARDS FOUND:**")
+                                    
+                                    local itemsFound = false
+                                    for _, item in pairs(stepfive:GetChildren()) do
+                                        if item:IsA("Frame") or item:IsA("TextLabel") then
+                                            local itemName = item.Name or "Unknown Item"
+                                            sendMessage("- " .. itemName)
+                                            itemsFound = true
+                                        end
+                                    end
+                                    
+                                    if not itemsFound then
+                                        sendMessage("No specific items found in the rewards UI.")
+                                    end
+                                    
+                                    sendMessage("------------------------")
+                                else
+                                    sendMessage("Items folder not found in the rewards UI.")
+                                end
+                                
+                                -- Turn off the toggle after rewards are processed
+                                Options.RewardsTracker:SetValue(false)
+                                break
+                            else
+                                print("Requirement not met yet. Current: " .. tostring(value) .. " / Required: " .. tostring(requirement))
+                            end
+                        else
+                            print("Slay objective not found.")
+                        end
+                        
+                        task.wait(2)
+                    end
+                end)
+            end
+        end
+    })
+
+    -- Add information paragraph to the Tracker tab
+    Tabs.Tracker:AddParagraph({
+        Title = "Tracker Information",
+        Content = "The rewards tracker will monitor your game progress and send reward information to Discord when objectives are completed."
+    })
+
+    -- Add URL input for Discord webhook
+    local WebhookInput = Tabs.Tracker:AddInput("WebhookURL", {
+        Title = "Discord Webhook URL",
+        Default = url,
+        Placeholder = "Paste here",
+        Numeric = false,
+        Finished = true,
+        Callback = function(Value)
+            url = Value
+            print("Webhook URL updated")
+        end
+    })
+else
+    -- Add a message for Tracker tab when in main menu
+    Tabs.Tracker:AddParagraph({
+        Title = "Rewards Tracker Unavailable",
+        Content = "The rewards tracker is only available during missions. Please join a mission to track and send rewards to Discord."
+    })
+end
+
+Tabs.Teleport:AddParagraph({
+    Title = "Current Place Info",
+    Content = "Current Place ID: " .. game.PlaceId
+})
+
+-- Force Retry button with your server hop script
+Tabs.Teleport:AddButton({
+    Title = "Force Retry",
+    Description = "Retry current game/mission",
+    Callback = function()
+        local TeleportService = game:GetService("TeleportService")
+        local player = game.Players.LocalPlayer
+        local currentPlaceId = game.PlaceId
+        TeleportService:Teleport(currentPlaceId, player)
+    end
+})
+
+-- Go Back to Lobby button (with remotes but no prints)
+Tabs.Teleport:AddButton({
+    Title = "Go Back to Lobby",
+    Description = "Returns to lobby using game remotes",
+    Callback = function()
+        -- Immediate Force Retry Script without prints
+        -- Get the required remotes
+        local remotesPath = game:GetService("ReplicatedStorage"):WaitForChild("Assets"):WaitForChild("Remotes")
+        local getRemote = remotesPath:WaitForChild("GET") -- RemoteFunction
+        local postRemote = remotesPath:WaitForChild("POST") -- RemoteEvent
+        
+        -- Function to force retry with all possible methods
+        local function executeForceRetry()
+            -- Try all possible retry methods in sequence
+            
+            -- Method 1: Send direct retry command via POST
+            pcall(function()
+                postRemote:FireServer("Retry")
+            end)
+            
+            -- Wait a small amount to let the first method process
+            wait(0.1)
+            
+            -- Method 2: Try to invoke retry function via GET
+            pcall(function()
+                getRemote:InvokeServer("Functions", "Retry", "Add")
+            end)
+            
+            -- Wait a small amount to let the second method process
+            wait(0.1)
+            
+            -- Method 3: Try to simulate the game's retry logic
+            pcall(function()
+                -- Set internal retry state
+                local retryResult = getRemote:InvokeServer("Functions", "Retry", "Add")
+                
+                -- Force a loading screen transition
+                postRemote:FireServer("Loading_Screen", "Transition", "Retry")
+            end)
+            
+            -- Wait a small amount to let the third method process
+            wait(0.1)
+            
+            -- Method 4: Try direct teleport command
+            pcall(function()
+                postRemote:FireServer("Functions", "Teleport")
+            end)
+        end
+        -- Execute the retry function immediately
+        executeForceRetry()
+        -- If the first attempt doesn't work, try a few more times with delays
+        spawn(function()
+            for i = 1, 3 do
+                wait(1) -- Wait 1 second between attempts
+                executeForceRetry()
+            end
+        end)
+    end
+})
+
+
+-- Setup the settings manager
+SaveManager:SetLibrary(Fluent)
+InterfaceManager:SetLibrary(Fluent)
+SaveManager:IgnoreThemeSettings()
+SaveManager:SetIgnoreIndexes({})
+InterfaceManager:SetFolder("AOT_R_Scripts")
+SaveManager:SetFolder("AOT_R_Scripts/configs")
+
+InterfaceManager:BuildInterfaceSection(Tabs.Settings)
+SaveManager:BuildConfigSection(Tabs.Settings)
+
+-- Load any saved configurations
+SaveManager:LoadAutoloadConfig()
