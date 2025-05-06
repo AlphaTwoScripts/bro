@@ -238,7 +238,7 @@ if not isInMainMenu then
 	local AutoEscapeToggle = Tabs.Features:AddToggle("AutoEscapeEnabled", {
     Title = "Auto Escape",
     Default = false,
-    Description = "Automatically escapes from grabs and titan hands",
+    Description = "",
     Callback = function(Value)
         -- Auto Escape Script
         local VIM = game:GetService("VirtualInputManager")
@@ -292,9 +292,9 @@ local SlashModeDropdown = Tabs.Features:AddDropdown("SlashMode", {
 
 -- Then create the toggle with the dropdown reference
 local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
-    Title = "Slash Through Hitbox",
+    Title = "Auto Farm",
     Default = false,
-    Description = "Slashes through titan hitbox with M1 spam",
+    Description = "",
     Callback = function(Value)
         _G.SlashThroughHitboxEnabled = Value -- Global variable to track state
         
@@ -850,7 +850,7 @@ end)
 local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
     Title = "Auto Blade Reload",
     Default = false,
-    Description = "Automatically reloads blades when they break (using server remotes)",
+    Description = "",
     Callback = function(Value)
         if Value then
             -- Variables for blade reload
@@ -985,7 +985,7 @@ if not isInMainMenu then
     local ESPToggle = Tabs.Visual:AddToggle("TitanESP", {
         Title = "Titan ESP",
         Default = false,
-        Description = "Highlights all titans for better visibility",
+        Description = "",
         Callback = function(Value)
             if Value then
                 local titansFolder = game.Workspace:FindFirstChild("Titans")
@@ -1071,7 +1071,7 @@ end
 local OptimizeToggle = Tabs.Visual:AddToggle("OptimizeGame", {
     Title = "Optimize Game",
     Default = false,
-    Description = "Reduces graphics for better performance (not reversible within session)",
+    Description = "Reduces graphics for better performance",
     Callback = function(Value)
         if Value then
             local decalsyeeted = true
