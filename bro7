@@ -1053,6 +1053,7 @@ end
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService") -- Add MarketplaceService to get game info
 
 -- Define alternative HTTP methods for different exploit environments
 local http = http or {}
@@ -1127,6 +1128,40 @@ Tabs.Visual:AddParagraph({
 
 -- Add features to the Tracker tab based on game state
 if not isInMainMenu then
+    -- Function to get game name from PlaceId
+    local function getGameInfo()
+        local placeId = game.PlaceId
+        local gameName = "Unknown Game"
+        
+        -- Try to get game name using MarketplaceService
+        local success, result = pcall(function()
+            local productInfo = MarketplaceService:GetProductInfo(placeId, Enum.InfoType.Asset)
+            return productInfo
+        end)
+        
+        if success and result then
+            gameName = result.Name or "Unknown Game"
+            
+            -- Try to get the experience name (game name) if this is a place within a game
+            if result.UniverseId then
+                local universeSuccess, universeResult = pcall(function()
+                    return MarketplaceService:GetProductInfo(result.UniverseId, Enum.InfoType.Asset)
+                end)
+                
+                if universeSuccess and universeResult then
+                    if result.UniverseId ~= placeId then
+                        -- This is a place within a game
+                        gameName = universeResult.Name or "Unknown Game"
+                    end
+                end
+            end
+        end
+        
+        return {
+            GameName = gameName
+        }
+    end
+
     -- Function to send premium Discord webhook messages
     local function sendPremiumEmbed(data, quantities)
         if not url or url == "" then
@@ -1159,6 +1194,9 @@ if not isInMainMenu then
         }
         local colorChoice = premiumColors[math.random(1, #premiumColors)]
         
+        -- Get game information
+        local gameInfo = getGameInfo()
+        
         -- Build the premium embed
         local embedData = {
             ["content"] = nil,
@@ -1178,37 +1216,37 @@ if not isInMainMenu then
             }
         }
         
-        -- Get player level and other stats if available
-        local level = "Unknown"
-        local playerData = workspace:FindFirstChild("PlayerData")
-        if playerData and playerData:FindFirstChild(LocalPlayer.Name) then
-            local playerStats = playerData[LocalPlayer.Name]
-            if playerStats:FindFirstChild("Level") then
-                level = playerStats.Level.Value
+        -- Get player streak from UI
+        local streak = "Unknown"
+        local success, result = pcall(function()
+            local streakUI = LocalPlayer.PlayerGui.Interface.Details.Prompt.Main.List.Robloxmlc_1.Streak
+            if streakUI and streakUI:IsA("TextLabel") then
+                return streakUI.Text
+            elseif streakUI and streakUI:IsA("IntValue") or streakUI:IsA("NumberValue") then
+                return tostring(streakUI.Value)
             end
+            return "Unknown"
+        end)
+        
+        if success and result then
+            streak = result
         end
         
         -- Add player info field
         table.insert(embedData.embeds[1].fields, {
             ["name"] = "👤 Player Information",
             ["value"] = "**Name:** " .. LocalPlayer.Name .. 
-                      "\n**Level:** " .. level ..
-                      "\n**Place ID:** " .. game.PlaceId,
+                      "\n**Streak:** " .. streak,
             ["inline"] = true
         })
         
-        -- Add mission info if available
-        local missionName = "Unknown Mission"
-        local missionInfo = workspace:FindFirstChild("MissionInfo")
-        if missionInfo and missionInfo:FindFirstChild("Name") then
-            missionName = missionInfo.Name.Value
-        end
-        
+        -- Add game info field
         table.insert(embedData.embeds[1].fields, {
-            ["name"] = "🎯 Mission Details",
-            ["value"] = "**Mission:** " .. missionName,
+            ["name"] = "🎮 Mission Detail",
+            ["value"] = "**Mission:** " .. gameInfo.GameName,
             ["inline"] = true
         })
+        
         
         -- Add numerical rewards section (XP, currencies, etc.)
         local numericalRewardsText = ""
@@ -1502,7 +1540,7 @@ if not isInMainMenu then
     -- Add premium UI elements to the Tracker tab
     Tabs.Tracker:AddParagraph({
         Title = "Rewards Tracker",
-        Content = "Thits premium tracker will monior your game progress and send beautifully formatted reward information to Discord when objectives are completed. Includes player stats, mission details, XP amounts, and reward rarities."
+        Content = "This premium tracker will monitor your game progress and send beautifully formatted reward information to Discord when objectives are completed. Includes player streak, game name, mission details, XP amounts, and reward rarities."
     })
 
     -- Add URL input for Discord webhook with verification
