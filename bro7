@@ -15,24 +15,6 @@ local CurrentPlaceId = game.PlaceId
 print("Current Place ID: " .. CurrentPlaceId)
 local isInMainMenu = (CurrentPlaceId == 13379208636)
 
--- Discord webhook URL for sending rewards information
-local url = "https://discord.com/api/webhooks/1364070882397519872/sBJRDke8Hjk0R5K1aJz3Pfekksv6kuSosfqyftyxRPyuCoVvJT7TlVw6rLeCKnaPALR5"
-
--- Function to send messages to Discord webhook
-local function sendMessage(msg)
-    local data = {
-        ["content"] = msg
-    }
-    local actual = http:JSONEncode(data)
-    local success, response = pcall(function()
-        request({Url = url, Method = "POST", Body = actual, Headers = {["content-type"] = "application/json"}})
-    end)
-    if success then
-        print("Message sent successfully!")
-    else
-        print("Failed to send message: "..tostring(response))
-    end
-end
 
 local Window = Fluent:CreateWindow({
     Title = "Attack On Titan Revolution " .. Fluent.Version,
@@ -1067,6 +1049,19 @@ else
    })
 end
 
+-- Define necessary variables and services at the top
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local HttpService = game:GetService("HttpService")
+
+-- Define alternative HTTP methods for different exploit environments
+local http = http or {}
+local request = request or syn and syn.request or http.request or http_request or nil
+
+
+-- Define the webhook URL variable
+local url = "https://discord.com/api/webhooks/1369305069023133716/yMckSQgE8pESRdkwvs7xLzLtRs-PQcdEvEIbuWZJ6OYgxMWtiR01RuTv_zlVScJZgvd7"
+
 -- Add game optimization toggle (available everywhere)
 local OptimizeToggle = Tabs.Visual:AddToggle("OptimizeGame", {
     Title = "Optimize Game",
@@ -1132,11 +1127,256 @@ Tabs.Visual:AddParagraph({
 
 -- Add features to the Tracker tab based on game state
 if not isInMainMenu then
+    -- Function to send premium Discord webhook messages
+    local function sendPremiumEmbed(data, quantities)
+        if not url or url == "" then
+            Fluent:Notify({
+                Title = "Webhook Error",
+                Content = "Please set a valid Discord webhook URL first",
+                Duration = 5
+            })
+            return
+        end
+        
+        -- Get current time in a nice format
+        local date = os.date("*t")
+        local formattedTime = string.format("%02d/%02d/%d %02d:%02d:%02d", 
+            date.month, date.day, date.year, date.hour, date.min, date.sec)
+            
+        -- Get player avatar for the embed
+        local LocalPlayer = Players.LocalPlayer
+        local userId = LocalPlayer.UserId
+        local thumbnail = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. userId .. "&width=420&height=420&format=png"
+        
+        -- Generate a random premium color (purples, blues, gold shades)
+        local premiumColors = {
+            0x7289DA, -- Discord Blurple
+            0xF1C40F, -- Gold
+            0x9B59B6, -- Purple
+            0x3498DB, -- Blue
+            0x11806A, -- Teal
+            0x546E7A  -- Blue Grey
+        }
+        local colorChoice = premiumColors[math.random(1, #premiumColors)]
+        
+        -- Build the premium embed
+        local embedData = {
+            ["content"] = nil,
+            ["embeds"] = {
+                {
+                    ["title"] = "REWARDS",
+                    ["description"] = "**Mission Completed Successfully!**\n*Rewards have been collected by " .. LocalPlayer.Name .. "*",
+                    ["color"] = colorChoice,
+                    ["fields"] = {},
+                    ["thumbnail"] = {
+                        ["url"] = thumbnail
+                    },
+                    ["footer"] = {
+                        ["text"] = "Rewards Tracker | " .. formattedTime
+                    }
+                }
+            }
+        }
+        
+        -- Get player level and other stats if available
+        local level = "Unknown"
+        local playerData = workspace:FindFirstChild("PlayerData")
+        if playerData and playerData:FindFirstChild(LocalPlayer.Name) then
+            local playerStats = playerData[LocalPlayer.Name]
+            if playerStats:FindFirstChild("Level") then
+                level = playerStats.Level.Value
+            end
+        end
+        
+        -- Add player info field
+        table.insert(embedData.embeds[1].fields, {
+            ["name"] = "👤 Player Information",
+            ["value"] = "**Name:** " .. LocalPlayer.Name .. 
+                      "\n**Level:** " .. level ..
+                      "\n**Place ID:** " .. game.PlaceId,
+            ["inline"] = true
+        })
+        
+        -- Add mission info if available
+        local missionName = "Unknown Mission"
+        local missionInfo = workspace:FindFirstChild("MissionInfo")
+        if missionInfo and missionInfo:FindFirstChild("Name") then
+            missionName = missionInfo.Name.Value
+        end
+        
+        table.insert(embedData.embeds[1].fields, {
+            ["name"] = "🎯 Mission Details",
+            ["value"] = "**Mission:** " .. missionName,
+            ["inline"] = true
+        })
+        
+        -- Add numerical rewards section (XP, currencies, etc.)
+        local numericalRewardsText = ""
+        if quantities and #quantities > 0 then
+            numericalRewardsText = "```\n"
+            for i, reward in ipairs(quantities) do
+                numericalRewardsText = numericalRewardsText .. reward.Name .. ": " .. reward.Amount .. "\n"
+            end
+            numericalRewardsText = numericalRewardsText .. "```"
+            
+            table.insert(embedData.embeds[1].fields, {
+                ["name"] = "💰 Rewards Earned",
+                ["value"] = numericalRewardsText,
+                ["inline"] = false
+            })
+        end
+        
+        -- Add item rewards section
+        local itemRewardsText = ""
+        local totalRewards = 0
+        
+        -- Process the provided data (rewards)
+        if type(data) == "table" and #data > 0 then
+            itemRewardsText = "```\n"
+            for i, reward in ipairs(data) do
+                local rarity = ""
+                -- Try to determine rarity from item name
+                if string.find(reward.Name, "Legendary") then
+                    rarity = "🟨 LEGENDARY!"
+                elseif string.find(reward.Name, "Epic") then
+                    rarity = "🟪 EPIC"
+                elseif string.find(reward.Name, "Rare") then
+                    rarity = "🟦 RARE"
+                elseif string.find(reward.Name, "Uncommon") then
+                    rarity = "🟩 UNCOMMON"
+                else
+                    rarity = "⬜ COMMON"
+                end
+                
+                local quantityText = ""
+                if reward.Quantity and reward.Quantity ~= "" then
+                    quantityText = " x" .. reward.Quantity
+                end
+                
+                itemRewardsText = itemRewardsText .. rarity .. " | " .. reward.Name .. quantityText .. "\n"
+                totalRewards = totalRewards + 1
+            end
+            itemRewardsText = itemRewardsText .. "```"
+        else
+            itemRewardsText = "```No specific items found```"
+        end
+        
+        table.insert(embedData.embeds[1].fields, {
+            ["name"] = "💎 Item Rewards (" .. totalRewards .. " items)",
+            ["value"] = itemRewardsText,
+            ["inline"] = false
+        })
+        
+        -- Add a timestamp for the webhook
+        embedData.embeds[1].timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
+        
+        -- Convert to JSON
+        local jsonData
+        
+        -- Try both methods of JSON encoding
+        local success, result = pcall(function()
+            if HttpService then
+                return HttpService:JSONEncode(embedData)
+            elseif http and http.JSONEncode then
+                return http:JSONEncode(embedData)
+            else
+                error("No JSON encoding function available")
+            end
+        end)
+        
+        if success then
+            jsonData = result
+        else
+            Fluent:Notify({
+                Title = "JSON Error",
+                Content = "Failed to encode JSON: " .. tostring(result),
+                Duration = 5
+            })
+            return
+        end
+        
+        -- Try to send webhook using multiple methods
+        local sent = false
+        
+        -- Method 1: Using HttpService:PostAsync
+        if not sent and HttpService then
+            local success, response = pcall(function()
+                return HttpService:PostAsync(url, jsonData, Enum.HttpContentType.ApplicationJson, false)
+            end)
+            
+            if success then
+                sent = true
+                Fluent:Notify({
+                    Title = "Success!",
+                    Content = "Rewards have been sent to Discord successfully (Method 1)",
+                    Duration = 5
+                })
+            else
+                print("Method 1 failed: " .. tostring(response))
+            end
+        end
+        
+        -- Method 2: Using request function
+        if not sent and request then
+            local success, response = pcall(function()
+                return request({
+                    Url = url, 
+                    Method = "POST", 
+                    Body = jsonData, 
+                    Headers = {["content-type"] = "application/json"}
+                })
+            end)
+            
+            if success then
+                sent = true
+                Fluent:Notify({
+                    Title = "Success!",
+                    Content = "Rewards have been sent to Discord successfully (Method 2)",
+                    Duration = 5
+                })
+            else
+                print("Method 2 failed: " .. tostring(response))
+            end
+        end
+        
+        -- Method 3: Using syn.request (for Synapse X)
+        if not sent and syn and syn.request then
+            local success, response = pcall(function()
+                return syn.request({
+                    Url = url,
+                    Method = "POST",
+                    Body = jsonData,
+                    Headers = {["content-type"] = "application/json"}
+                })
+            end)
+            
+            if success then
+                sent = true
+                Fluent:Notify({
+                    Title = "Success!",
+                    Content = "Rewards have been sent to Discord successfully (Method 3)",
+                    Duration = 5
+                })
+            else
+                print("Method 3 failed: " .. tostring(response))
+            end
+        end
+        
+        -- Fallback notification if all methods failed
+        if not sent then
+            Fluent:Notify({
+                Title = "Webhook Error",
+                Content = "All webhook sending methods failed. Check console for details.",
+                Duration = 5
+            })
+        end
+    end
+
     -- Add the rewards tracker toggle to the Tracker tab
     local RewardsToggle = Tabs.Tracker:AddToggle("RewardsTracker", {
         Title = "Rewards Tracker",
         Default = true,
-        Description = "Track and send rewards to Discord webhook",
+        Description = "",
         Callback = function(Value)
             if Value then
                 -- Create a new thread to avoid freezing the UI
@@ -1187,29 +1427,59 @@ if not isInMainMenu then
                             if value and requirement and value >= requirement then
                                 Fluent:Notify({
                                     Title = "Rewards Available!",
-                                    Content = "Requirement met. Collecting rewards information.",
+                                    Content = "Requirement met. Collecting rewards information...",
                                     Duration = 5
                                 })
                                 
                                 if stepfive then
-                                    sendMessage("**REWARDS FOUND:**")
+                                    local rewardsList = {}
+                                    local quantitiesList = {}
                                     
-                                    local itemsFound = false
+                                    -- Process item rewards
                                     for _, item in pairs(stepfive:GetChildren()) do
-                                        if item:IsA("Frame") or item:IsA("TextLabel") then
+                                        if (item:IsA("Frame") or item:IsA("TextLabel")) and item.Name ~= "XP" and item.Name ~= "Gold" and item.Name ~= "Gems" then
                                             local itemName = item.Name or "Unknown Item"
-                                            sendMessage("- " .. itemName)
-                                            itemsFound = true
+                                            
+                                            -- Try to get quantity information
+                                            local quantity = ""
+                                            local quantityLabel = item:FindFirstChild("Main") and 
+                                                                item.Main:FindFirstChild("Inner") and 
+                                                                item.Main.Inner:FindFirstChild("Quantity")
+                                            
+                                            if quantityLabel and quantityLabel:IsA("TextLabel") then
+                                                quantity = quantityLabel.Text
+                                            end
+                                            
+                                            table.insert(rewardsList, {
+                                                Name = itemName,
+                                                Quantity = quantity
+                                            })
                                         end
                                     end
                                     
-                                    if not itemsFound then
-                                        sendMessage("No specific items found in the rewards UI.")
+                                    -- Process XP and other numerical rewards
+                                    local rewardTypes = {"XP", "Gold", "Gems", "Coins", "Tokens", "Points"}
+                                    
+                                    for _, rewardType in ipairs(rewardTypes) do
+                                        local rewardFrame = stepfive:FindFirstChild(rewardType)
+                                        if rewardFrame then
+                                            local quantityLabel = rewardFrame:FindFirstChild("Main") and 
+                                                                rewardFrame.Main:FindFirstChild("Inner") and 
+                                                                rewardFrame.Main.Inner:FindFirstChild("Quantity")
+                                            
+                                            if quantityLabel and quantityLabel:IsA("TextLabel") then
+                                                table.insert(quantitiesList, {
+                                                    Name = rewardType,
+                                                    Amount = quantityLabel.Text
+                                                })
+                                            end
+                                        end
                                     end
                                     
-                                    sendMessage("------------------------")
+                                    -- Send the premium embed with the collected rewards and quantities
+                                    sendPremiumEmbed(rewardsList, quantitiesList)
                                 else
-                                    sendMessage("Items folder not found in the rewards UI.")
+                                    sendPremiumEmbed({Name = "No specific items found in the rewards UI"}, {})
                                 end
                                 
                                 -- Turn off the toggle after rewards are processed
@@ -1229,22 +1499,57 @@ if not isInMainMenu then
         end
     })
 
-    -- Add information paragraph to the Tracker tab
+    -- Add premium UI elements to the Tracker tab
     Tabs.Tracker:AddParagraph({
-        Title = "Tracker Information",
-        Content = "The rewards tracker will monitor your game progress and send reward information to Discord when objectives are completed."
+        Title = "Rewards Tracker",
+        Content = "Thits premium tracker will monior your game progress and send beautifully formatted reward information to Discord when objectives are completed. Includes player stats, mission details, XP amounts, and reward rarities."
     })
 
-    -- Add URL input for Discord webhook
+    -- Add URL input for Discord webhook with verification
     local WebhookInput = Tabs.Tracker:AddInput("WebhookURL", {
         Title = "Discord Webhook URL",
         Default = url,
-        Placeholder = "Paste here",
+        Placeholder = "https://discord.com/api/webhooks/...",
         Numeric = false,
         Finished = true,
         Callback = function(Value)
-            url = Value
-            print("Webhook URL updated")
+            -- Basic verification that it looks like a Discord webhook
+            if string.match(Value, "^https://discord.com/api/webhooks/") then
+                url = Value
+                Fluent:Notify({
+                    Title = "Webhook Updated",
+                    Content = "Discord webhook URL has been set successfully",
+                    Duration = 3
+                })
+            else
+                Fluent:Notify({
+                    Title = "Invalid Webhook",
+                    Content = "Please enter a valid Discord webhook URL starting with https://discord.com/api/webhooks/",
+                    Duration = 5
+                })
+            end
+        end
+    })
+    
+    -- Add test webhook button
+    Tabs.Tracker:AddButton({
+        Title = "Test Webhook",
+        Description = "Send a test message to verify your webhook is working",
+        Callback = function()
+            local testRewards = {
+                {Name = "Test Item - Common", Quantity = "1"},
+                {Name = "Test Weapon - Rare", Quantity = "2"},
+                {Name = "Test Material - Epic", Quantity = "5"},
+                {Name = "Test Legendary Item - Legendary", Quantity = "1"}
+            }
+            
+            local testQuantities = {
+                {Name = "XP", Amount = "1,250"},
+                {Name = "Gold", Amount = "500"},
+                {Name = "Gems", Amount = "25"}
+            }
+            
+            sendPremiumEmbed(testRewards, testQuantities)
         end
     })
 else
@@ -1255,10 +1560,6 @@ else
     })
 end
 
-Tabs.Teleport:AddParagraph({
-    Title = "Current Place Info",
-    Content = "Current Place ID: " .. game.PlaceId
-})
 
 -- Force Retry button with your server hop script
 Tabs.Teleport:AddButton({
