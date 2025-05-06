@@ -832,7 +832,7 @@ end)
 local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
     Title = "Auto Blade Reload",
     Default = false,
-    Description = "",
+    Description = "Automatically reloads blades when they break (using server remotes)",
     Callback = function(Value)
         if Value then
             -- Variables for blade reload
@@ -846,7 +846,7 @@ local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
             
             -- Variables for timing and state
             local lastReloadTime = 0
-            local RELOAD_COOLDOWN = 1 -- Seconds to wait between reload attempts
+            local RELOAD_COOLDOWN = 10 -- Seconds to wait between reload attempts
             local isReloading = false
             
             -- Direct server reload function (more reliable than key simulation)
@@ -960,6 +960,7 @@ local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
         end
     end
 })
+
 
 -- Add features to the Visual tab - some are conditional
 if not isInMainMenu then
@@ -1128,7 +1129,7 @@ Tabs.Visual:AddParagraph({
 -- Add features to the Tracker tab based on game state
 if not isInMainMenu then
     -- Function to send premium Discord webhook messages
-    local function sendPremiumEmbed(data)
+    local function sendPremiumEmbed(data, quantities)
         if not url or url == "" then
             Fluent:Notify({
                 Title = "Webhook Error",
@@ -1210,39 +1211,60 @@ if not isInMainMenu then
             ["inline"] = true
         })
         
-        -- Add rewards section
-        local rewardsText = ""
+        -- Add numerical rewards section (XP, currencies, etc.)
+        local numericalRewardsText = ""
+        if quantities and #quantities > 0 then
+            numericalRewardsText = "```\n"
+            for i, reward in ipairs(quantities) do
+                numericalRewardsText = numericalRewardsText .. reward.Name .. ": " .. reward.Amount .. "\n"
+            end
+            numericalRewardsText = numericalRewardsText .. "```"
+            
+            table.insert(embedData.embeds[1].fields, {
+                ["name"] = "💰 Rewards Earned",
+                ["value"] = numericalRewardsText,
+                ["inline"] = false
+            })
+        end
+        
+        -- Add item rewards section
+        local itemRewardsText = ""
         local totalRewards = 0
         
         -- Process the provided data (rewards)
         if type(data) == "table" and #data > 0 then
-            rewardsText = "```\n"
+            itemRewardsText = "```\n"
             for i, reward in ipairs(data) do
                 local rarity = ""
                 -- Try to determine rarity from item name
-                if string.find(reward, "Legendary") then
+                if string.find(reward.Name, "Legendary") then
                     rarity = "🟨 LEGENDARY!"
-                elseif string.find(reward, "Epic") then
+                elseif string.find(reward.Name, "Epic") then
                     rarity = "🟪 EPIC"
-                elseif string.find(reward, "Rare") then
+                elseif string.find(reward.Name, "Rare") then
                     rarity = "🟦 RARE"
-                elseif string.find(reward, "Uncommon") then
+                elseif string.find(reward.Name, "Uncommon") then
                     rarity = "🟩 UNCOMMON"
                 else
                     rarity = "⬜ COMMON"
                 end
                 
-                rewardsText = rewardsText .. rarity .. " | " .. reward .. "\n"
+                local quantityText = ""
+                if reward.Quantity and reward.Quantity ~= "" then
+                    quantityText = " x" .. reward.Quantity
+                end
+                
+                itemRewardsText = itemRewardsText .. rarity .. " | " .. reward.Name .. quantityText .. "\n"
                 totalRewards = totalRewards + 1
             end
-            rewardsText = rewardsText .. "```"
+            itemRewardsText = itemRewardsText .. "```"
         else
-            rewardsText = "```No specific items found```"
+            itemRewardsText = "```No specific items found```"
         end
         
         table.insert(embedData.embeds[1].fields, {
-            ["name"] = "💎 Rewards (" .. totalRewards .. " items)",
-            ["value"] = rewardsText,
+            ["name"] = "💎 Item Rewards (" .. totalRewards .. " items)",
+            ["value"] = itemRewardsText,
             ["inline"] = false
         })
         
@@ -1353,9 +1375,9 @@ if not isInMainMenu then
 
     -- Add the rewards tracker toggle to the Tracker tab
     local RewardsToggle = Tabs.Tracker:AddToggle("RewardsTracker", {
-        Title = "Premium Rewards Tracker",
+        Title = "Rewards Tracker",
         Default = true,
-        Description = "Track and send premium styled rewards to Discord webhook",
+        Description = "",
         Callback = function(Value)
             if Value then
                 -- Create a new thread to avoid freezing the UI
@@ -1405,25 +1427,60 @@ if not isInMainMenu then
                             
                             if value and requirement and value >= requirement then
                                 Fluent:Notify({
-                                    Title = "🏆 Premium Rewards Available!",
+                                    Title = "Rewards Available!",
                                     Content = "Requirement met. Collecting rewards information...",
                                     Duration = 5
                                 })
                                 
                                 if stepfive then
                                     local rewardsList = {}
+                                    local quantitiesList = {}
                                     
+                                    -- Process item rewards
                                     for _, item in pairs(stepfive:GetChildren()) do
-                                        if item:IsA("Frame") or item:IsA("TextLabel") then
+                                        if (item:IsA("Frame") or item:IsA("TextLabel")) and item.Name ~= "XP" and item.Name ~= "Gold" and item.Name ~= "Gems" then
                                             local itemName = item.Name or "Unknown Item"
-                                            table.insert(rewardsList, itemName)
+                                            
+                                            -- Try to get quantity information
+                                            local quantity = ""
+                                            local quantityLabel = item:FindFirstChild("Main") and 
+                                                                item.Main:FindFirstChild("Inner") and 
+                                                                item.Main.Inner:FindFirstChild("Quantity")
+                                            
+                                            if quantityLabel and quantityLabel:IsA("TextLabel") then
+                                                quantity = quantityLabel.Text
+                                            end
+                                            
+                                            table.insert(rewardsList, {
+                                                Name = itemName,
+                                                Quantity = quantity
+                                            })
                                         end
                                     end
                                     
-                                    -- Send the premium embed with the collected rewards
-                                    sendPremiumEmbed(rewardsList)
+                                    -- Process XP and other numerical rewards
+                                    local rewardTypes = {"XP", "Gold", "Gems", "Coins", "Tokens", "Points"}
+                                    
+                                    for _, rewardType in ipairs(rewardTypes) do
+                                        local rewardFrame = stepfive:FindFirstChild(rewardType)
+                                        if rewardFrame then
+                                            local quantityLabel = rewardFrame:FindFirstChild("Main") and 
+                                                                rewardFrame.Main:FindFirstChild("Inner") and 
+                                                                rewardFrame.Main.Inner:FindFirstChild("Quantity")
+                                            
+                                            if quantityLabel and quantityLabel:IsA("TextLabel") then
+                                                table.insert(quantitiesList, {
+                                                    Name = rewardType,
+                                                    Amount = quantityLabel.Text
+                                                })
+                                            end
+                                        end
+                                    end
+                                    
+                                    -- Send the premium embed with the collected rewards and quantities
+                                    sendPremiumEmbed(rewardsList, quantitiesList)
                                 else
-                                    sendPremiumEmbed({"No specific items found in the rewards UI"})
+                                    sendPremiumEmbed({Name = "No specific items found in the rewards UI"}, {})
                                 end
                                 
                                 -- Turn off the toggle after rewards are processed
@@ -1445,8 +1502,8 @@ if not isInMainMenu then
 
     -- Add premium UI elements to the Tracker tab
     Tabs.Tracker:AddParagraph({
-        Title = "✨ Premium Rewards Tracker",
-        Content = "This premium tracker will monitor your game progress and send beautifully formatted reward information to Discord when objectives are completed. Includes player stats, mission details and reward rarities."
+        Title = "Rewards Tracker",
+        Content = "Thits premium tracker will monior your game progress and send beautifully formatted reward information to Discord when objectives are completed. Includes player stats, mission details, XP amounts, and reward rarities."
     })
 
     -- Add URL input for Discord webhook with verification
@@ -1481,27 +1538,29 @@ if not isInMainMenu then
         Description = "Send a test message to verify your webhook is working",
         Callback = function()
             local testRewards = {
-                "Test Item - Common",
-                "Test Weapon - Rare",
-                "Test Material - Epic", 
-                "Test Legendary Item - Legendary"
+                {Name = "Test Item - Common", Quantity = "1"},
+                {Name = "Test Weapon - Rare", Quantity = "2"},
+                {Name = "Test Material - Epic", Quantity = "5"},
+                {Name = "Test Legendary Item - Legendary", Quantity = "1"}
             }
-            sendPremiumEmbed(testRewards)
+            
+            local testQuantities = {
+                {Name = "XP", Amount = "1,250"},
+                {Name = "Gold", Amount = "500"},
+                {Name = "Gems", Amount = "25"}
+            }
+            
+            sendPremiumEmbed(testRewards, testQuantities)
         end
     })
 else
     -- Add a message for Tracker tab when in main menu
     Tabs.Tracker:AddParagraph({
-        Title = "✨ Premium Rewards Tracker Unavailable",
-        Content = "The premium rewards tracker is only available during missions. Please join a mission to track and send rewards to Discord."
+        Title = "Rewards Tracker Unavailable",
+        Content = "The rewards tracker is only available during missions. Please join a mission to track and send rewards to Discord."
     })
 end
 
--- Add place info to Teleport tab (available everywhere)
-Tabs.Teleport:AddParagraph({
-    Title = "Current Place Info",
-    Content = "Current Place ID: " .. game.PlaceId
-})
 
 -- Force Retry button with your server hop script
 Tabs.Teleport:AddButton({
