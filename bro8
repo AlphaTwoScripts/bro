@@ -1054,11 +1054,12 @@ end
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local HttpService = game:GetService("HttpService")
+local MarketplaceService = game:GetService("MarketplaceService")
+local TweenService = game:GetService("TweenService")
 
 -- Define alternative HTTP methods for different exploit environments
 local http = http or {}
 local request = request or syn and syn.request or http.request or http_request or nil
-
 
 -- Define the webhook URL variable
 local url = "https://discord.com/api/webhooks/1369305069023133716/yMckSQgE8pESRdkwvs7xLzLtRs-PQcdEvEIbuWZJ6OYgxMWtiR01RuTv_zlVScJZgvd7"
@@ -1128,6 +1129,126 @@ Tabs.Visual:AddParagraph({
 
 -- Add features to the Tracker tab based on game state
 if not isInMainMenu then
+    -- Function to get game name from PlaceId
+    local function getGameInfo()
+        local placeId = game.PlaceId
+        local gameName = "Unknown Game"
+        local gameIcon = ""
+        local universeId = 0
+        
+        -- Try to get game name using MarketplaceService
+        local success, result = pcall(function()
+            local productInfo = MarketplaceService:GetProductInfo(placeId, Enum.InfoType.Asset)
+            return productInfo
+        end)
+        
+        if success and result then
+            gameName = result.Name or "Unknown Game"
+            gameIcon = "https://www.roblox.com/asset-thumbnail/image?assetId=" .. placeId .. "&width=150&height=150&format=png"
+            
+            -- Try to get the experience name (game name) if this is a place within a game
+            if result.UniverseId then
+                universeId = result.UniverseId
+                local universeSuccess, universeResult = pcall(function()
+                    return MarketplaceService:GetProductInfo(result.UniverseId, Enum.InfoType.Asset)
+                end)
+                
+                if universeSuccess and universeResult then
+                    if result.UniverseId ~= placeId then
+                        -- This is a place within a game
+                        gameName = universeResult.Name or "Unknown Game"
+                        gameIcon = "https://www.roblox.com/asset-thumbnail/image?assetId=" .. universeId .. "&width=150&height=150&format=png"
+                    end
+                end
+            end
+        end
+        
+        return {
+            GameName = gameName,
+            GameIcon = gameIcon,
+            PlaceId = placeId,
+            UniverseId = universeId
+        }
+    end
+
+    -- Generate a rich color based on item rarity
+    local function getRarityInfo(itemName)
+        local rarityData = {
+            Legendary = {
+                color = 0xF1C40F, -- Gold
+                emoji = "🔱",
+                border = "═════════════════════",
+                displayName = "LEGENDARY"
+            },
+            Epic = {
+                color = 0x9B59B6, -- Purple
+                emoji = "⚜️",
+                border = "─────────────────────",
+                displayName = "EPIC"
+            },
+            Rare = {
+                color = 0x3498DB, -- Blue
+                emoji = "🔷",
+                border = "─────────────────────",
+                displayName = "RARE"
+            },
+            Uncommon = {
+                color = 0x2ECC71, -- Green
+                emoji = "🔰",
+                border = "─────────────────────",
+                displayName = "UNCOMMON"
+            },
+            Common = {
+                color = 0x95A5A6, -- Gray
+                emoji = "⚪",
+                border = "─────────────────────", 
+                displayName = "COMMON"
+            }
+        }
+        
+        -- Determine rarity from item name
+        local rarity
+        if string.find(string.lower(itemName), "legendary") then
+            rarity = rarityData.Legendary
+        elseif string.find(string.lower(itemName), "epic") then
+            rarity = rarityData.Epic
+        elseif string.find(string.lower(itemName), "rare") then
+            rarity = rarityData.Rare
+        elseif string.find(string.lower(itemName), "uncommon") then
+            rarity = rarityData.Uncommon
+        else
+            rarity = rarityData.Common
+        end
+        
+        return rarity
+    end
+
+    -- Function to format numbers with commas
+    local function formatNumber(num)
+        if type(num) ~= "number" then
+            -- Try to convert string to number if possible
+            local success, result = pcall(function()
+                return tonumber(string.match(num, "%d+"))
+            end)
+            
+            if not success or not result then
+                return num -- Return original if conversion failed
+            end
+            
+            num = result
+        end
+        
+        local formatted = tostring(num)
+        local k
+        
+        while true do
+            formatted, k = string.gsub(formatted, "^(-?%d+)(%d%d%d)", '%1,%2')
+            if k == 0 then break end
+        end
+        
+        return formatted
+    end
+
     -- Function to send premium Discord webhook messages
     local function sendPremiumEmbed(data, quantities)
         if not url or url == "" then
@@ -1147,126 +1268,281 @@ if not isInMainMenu then
         -- Get player avatar for the embed
         local LocalPlayer = Players.LocalPlayer
         local userId = LocalPlayer.UserId
-        local thumbnail = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. userId .. "&width=420&height=420&format=png"
+        local playerName = LocalPlayer.Name
+        local displayName = LocalPlayer.DisplayName
+        local thumbnail = "https://www.roblox.com/headshot-thumbnail/image?userId=" .. userId .. "&width=512&height=512&format=png"
         
-        -- Generate a random premium color (purples, blues, gold shades)
-        local premiumColors = {
-            0x7289DA, -- Discord Blurple
-            0xF1C40F, -- Gold
-            0x9B59B6, -- Purple
-            0x3498DB, -- Blue
-            0x11806A, -- Teal
-            0x546E7A  -- Blue Grey
-        }
-        local colorChoice = premiumColors[math.random(1, #premiumColors)]
+        -- Get game information
+        local gameInfo = getGameInfo()
+        
+        -- Generate a random color for the embed sidebar
+        local primaryColor = 0x5865F2 -- Discord brand blue
+        
+        -- Get player streak from UI
+        local streak = "Unknown"
+        local success, result = pcall(function()
+            local streakUI = LocalPlayer.PlayerGui.Interface.Details.Prompt.Main.List.Robloxmlc_1.Streak
+            if streakUI and streakUI:IsA("TextLabel") then
+                return streakUI.Text
+            elseif streakUI and (streakUI:IsA("IntValue") or streakUI:IsA("NumberValue")) then
+                return tostring(streakUI.Value)
+            end
+            return "Unknown"
+        end)
+        
+        if success and result then
+            streak = result
+        end
+        
+        -- Calculate total XP, gold, and items
+        local totalXP = 0
+        local totalGold = 0
+        local totalGems = 0
+        local totalItems = 0
+        local hasLegendary = false
+        local hasEpic = false
+        
+        -- Process XP/Gold/Gems
+        if quantities and #quantities > 0 then
+            for _, reward in ipairs(quantities) do
+                local amount = tonumber(string.match(reward.Amount or "0", "%d+") or 0)
+                
+                if reward.Name == "XP" then
+                    totalXP = amount
+                elseif reward.Name == "Gold" then
+                    totalGold = amount
+                elseif reward.Name == "Gems" then
+                    totalGems = amount
+                end
+            end
+        end
+        
+        -- Process items for rarity
+        if data and #data > 0 then
+            totalItems = #data
+            for _, item in ipairs(data) do
+                local itemName = item.Name or "Unknown Item"
+                
+                if string.find(string.lower(itemName), "legendary") then
+                    hasLegendary = true
+                elseif string.find(string.lower(itemName), "epic") then
+                    hasEpic = true
+                end
+            end
+        end
+        
+        -- Choose appropriate title based on rewards quality
+        local embedTitle = "🏆 **MISSION REWARDS**"
+        local embedDescription = ""
+        
+        if hasLegendary then
+            embedTitle = "✨ **LEGENDARY REWARDS ACQUIRED!** ✨"
+            embedDescription = "**" .. playerName .. "** just hit the jackpot with **LEGENDARY** loot!"
+            primaryColor = 0xF1C40F -- Gold for legendary
+        elseif hasEpic then
+            embedTitle = "💜 **EPIC REWARDS CLAIMED!** 💜"
+            embedDescription = "**" .. playerName .. "** discovered **EPIC** treasures!"
+            primaryColor = 0x9B59B6 -- Purple for epic
+        elseif totalXP > 1000 or totalGold > 500 or totalGems > 10 then
+            embedTitle = "💰 **PREMIUM REWARDS EARNED!** 💰"
+            embedDescription = "**" .. playerName .. "** completed a mission with valuable rewards!"
+            primaryColor = 0x3498DB -- Blue for good rewards
+        else
+            embedDescription = "**" .. playerName .. "** completed a mission successfully!"
+        end
         
         -- Build the premium embed
         local embedData = {
             ["content"] = nil,
             ["embeds"] = {
                 {
-                    ["title"] = "REWARDS",
-                    ["description"] = "**Mission Completed Successfully!**\n*Rewards have been collected by " .. LocalPlayer.Name .. "*",
-                    ["color"] = colorChoice,
+                    ["title"] = embedTitle,
+                    ["description"] = embedDescription,
+                    ["color"] = primaryColor,
                     ["fields"] = {},
+                    ["author"] = {
+                        ["name"] = displayName .. " (@" .. playerName .. ")",
+                        ["icon_url"] = thumbnail
+                    },
                     ["thumbnail"] = {
-                        ["url"] = thumbnail
+                        ["url"] = gameInfo.GameIcon
                     },
                     ["footer"] = {
-                        ["text"] = "Rewards Tracker | " .. formattedTime
+                        ["text"] = "Mission Completed • " .. formattedTime
                     }
                 }
             }
         }
         
-        -- Get player level and other stats if available
-        local level = "Unknown"
-        local playerData = workspace:FindFirstChild("PlayerData")
-        if playerData and playerData:FindFirstChild(LocalPlayer.Name) then
-            local playerStats = playerData[LocalPlayer.Name]
-            if playerStats:FindFirstChild("Level") then
-                level = playerStats.Level.Value
-            end
-        end
-        
-        -- Add player info field
+        -- Add player info field with enhanced formatting
         table.insert(embedData.embeds[1].fields, {
-            ["name"] = "👤 Player Information",
-            ["value"] = "**Name:** " .. LocalPlayer.Name .. 
-                      "\n**Level:** " .. level ..
-                      "\n**Place ID:** " .. game.PlaceId,
+            ["name"] = "👤 **PLAYER STATS**",
+            ["value"] = "**Daily Streak:** `" .. streak .. "` 🔥\n" ..
+                      "**Player ID:** `" .. userId .. "`\n" ..
+                      "**Server:** `" .. (game.JobId or "Unknown") .. "`",
             ["inline"] = true
         })
         
-        -- Add mission info if available
-        local missionName = "Unknown Mission"
-        local missionInfo = workspace:FindFirstChild("MissionInfo")
-        if missionInfo and missionInfo:FindFirstChild("Name") then
-            missionName = missionInfo.Name.Value
-        end
-        
+        -- Add mission info field with enhanced formatting
         table.insert(embedData.embeds[1].fields, {
-            ["name"] = "🎯 Mission Details",
-            ["value"] = "**Mission:** " .. missionName,
+            ["name"] = "🎮 **MISSION INFO**",
+            ["value"] = "**Mission:** `" .. gameInfo.GameName .. "`\n" ..
+                      "**Place ID:** `" .. gameInfo.PlaceId .. "`\n" ..
+                      "**Time:** `" .. os.date("%H:%M:%S") .. "`",
             ["inline"] = true
         })
         
-        -- Add numerical rewards section (XP, currencies, etc.)
-        local numericalRewardsText = ""
+        -- Add a visual divider
+        table.insert(embedData.embeds[1].fields, {
+            ["name"] = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯",
+            ["value"] = "",
+            ["inline"] = false
+        })
+        
+        -- Add currency rewards section with icons and formatting
         if quantities and #quantities > 0 then
-            numericalRewardsText = "```\n"
-            for i, reward in ipairs(quantities) do
-                numericalRewardsText = numericalRewardsText .. reward.Name .. ": " .. reward.Amount .. "\n"
+            local currencyFields = {}
+            
+            for _, reward in ipairs(quantities) do
+                local icon = "💰"
+                if reward.Name == "XP" then
+                    icon = "✨"
+                elseif reward.Name == "Gems" then
+                    icon = "💎"
+                elseif reward.Name == "Tokens" then
+                    icon = "🔮"
+                elseif reward.Name == "Points" then
+                    icon = "🏅"
+                elseif reward.Name == "Coins" then
+                    icon = "🪙"
+                end
+                
+                table.insert(currencyFields, icon .. " **" .. reward.Name .. ":** `" .. formatNumber(reward.Amount) .. "`")
             end
-            numericalRewardsText = numericalRewardsText .. "```"
             
             table.insert(embedData.embeds[1].fields, {
-                ["name"] = "💰 Rewards Earned",
-                ["value"] = numericalRewardsText,
+                ["name"] = "💰 **CURRENCIES EARNED**",
+                ["value"] = table.concat(currencyFields, "\n"),
                 ["inline"] = false
             })
         end
         
-        -- Add item rewards section
-        local itemRewardsText = ""
-        local totalRewards = 0
-        
-        -- Process the provided data (rewards)
-        if type(data) == "table" and #data > 0 then
-            itemRewardsText = "```\n"
-            for i, reward in ipairs(data) do
-                local rarity = ""
-                -- Try to determine rarity from item name
-                if string.find(reward.Name, "Legendary") then
-                    rarity = "🟨 LEGENDARY!"
-                elseif string.find(reward.Name, "Epic") then
-                    rarity = "🟪 EPIC"
-                elseif string.find(reward.Name, "Rare") then
-                    rarity = "🟦 RARE"
-                elseif string.find(reward.Name, "Uncommon") then
-                    rarity = "🟩 UNCOMMON"
+        -- Add item rewards section with rarity formatting
+        if data and #data > 0 then
+            -- Group items by rarity for better organization
+            local itemsByRarity = {
+                Legendary = {},
+                Epic = {},
+                Rare = {},
+                Uncommon = {},
+                Common = {}
+            }
+            
+            for _, reward in ipairs(data) do
+                local itemName = reward.Name or "Unknown Item"
+                local quantity = reward.Quantity and reward.Quantity ~= "" and " x" .. reward.Quantity or ""
+                
+                if string.find(string.lower(itemName), "legendary") then
+                    table.insert(itemsByRarity.Legendary, {name = itemName, quantity = quantity})
+                elseif string.find(string.lower(itemName), "epic") then
+                    table.insert(itemsByRarity.Epic, {name = itemName, quantity = quantity})
+                elseif string.find(string.lower(itemName), "rare") then
+                    table.insert(itemsByRarity.Rare, {name = itemName, quantity = quantity})
+                elseif string.find(string.lower(itemName), "uncommon") then
+                    table.insert(itemsByRarity.Uncommon, {name = itemName, quantity = quantity})
                 else
-                    rarity = "⬜ COMMON"
+                    table.insert(itemsByRarity.Common, {name = itemName, quantity = quantity})
                 end
-                
-                local quantityText = ""
-                if reward.Quantity and reward.Quantity ~= "" then
-                    quantityText = " x" .. reward.Quantity
-                end
-                
-                itemRewardsText = itemRewardsText .. rarity .. " | " .. reward.Name .. quantityText .. "\n"
-                totalRewards = totalRewards + 1
             end
-            itemRewardsText = itemRewardsText .. "```"
+            
+            -- Format items by rarity with appropriate styling
+            local itemsText = ""
+            
+            -- Legendary items (with special formatting)
+            if #itemsByRarity.Legendary > 0 then
+                local legendaryInfo = getRarityInfo("Legendary")
+                
+                itemsText = itemsText .. legendaryInfo.border .. "\n"
+                itemsText = itemsText .. legendaryInfo.emoji .. " **" .. legendaryInfo.displayName .. "** " .. legendaryInfo.emoji .. "\n"
+                itemsText = itemsText .. legendaryInfo.border .. "\n"
+                
+                for _, item in ipairs(itemsByRarity.Legendary) do
+                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
+                end
+                
+                itemsText = itemsText .. "\n"
+            end
+            
+            -- Epic items
+            if #itemsByRarity.Epic > 0 then
+                local epicInfo = getRarityInfo("Epic")
+                
+                itemsText = itemsText .. epicInfo.emoji .. " **" .. epicInfo.displayName .. "** " .. epicInfo.emoji .. "\n"
+                itemsText = itemsText .. epicInfo.border .. "\n"
+                
+                for _, item in ipairs(itemsByRarity.Epic) do
+                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
+                end
+                
+                itemsText = itemsText .. "\n"
+            end
+            
+            -- Rare items
+            if #itemsByRarity.Rare > 0 then
+                local rareInfo = getRarityInfo("Rare")
+                
+                itemsText = itemsText .. rareInfo.emoji .. " **" .. rareInfo.displayName .. "** " .. rareInfo.emoji .. "\n"
+                itemsText = itemsText .. rareInfo.border .. "\n"
+                
+                for _, item in ipairs(itemsByRarity.Rare) do
+                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
+                end
+                
+                itemsText = itemsText .. "\n"
+            end
+            
+            -- Uncommon items
+            if #itemsByRarity.Uncommon > 0 then
+                local uncommonInfo = getRarityInfo("Uncommon")
+                
+                itemsText = itemsText .. uncommonInfo.emoji .. " **" .. uncommonInfo.displayName .. "** " .. uncommonInfo.emoji .. "\n"
+                itemsText = itemsText .. uncommonInfo.border .. "\n"
+                
+                for _, item in ipairs(itemsByRarity.Uncommon) do
+                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
+                end
+                
+                itemsText = itemsText .. "\n"
+            end
+            
+            -- Common items (grouped at the end)
+            if #itemsByRarity.Common > 0 then
+                local commonInfo = getRarityInfo("Common")
+                
+                itemsText = itemsText .. commonInfo.emoji .. " **" .. commonInfo.displayName .. "** " .. commonInfo.emoji .. "\n"
+                itemsText = itemsText .. commonInfo.border .. "\n"
+                
+                for _, item in ipairs(itemsByRarity.Common) do
+                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
+                end
+            end
+            
+            if itemsText == "" then
+                itemsText = "No specific items found."
+            end
+            
+            table.insert(embedData.embeds[1].fields, {
+                ["name"] = "💎 **ITEMS ACQUIRED** (" .. totalItems .. " total)",
+                ["value"] = itemsText,
+                ["inline"] = false
+            })
         else
-            itemRewardsText = "```No specific items found```"
+            table.insert(embedData.embeds[1].fields, {
+                ["name"] = "💎 **ITEMS ACQUIRED**",
+                ["value"] = "No specific items found in the rewards.",
+                ["inline"] = false
+            })
         end
-        
-        table.insert(embedData.embeds[1].fields, {
-            ["name"] = "💎 Item Rewards (" .. totalRewards .. " items)",
-            ["value"] = itemRewardsText,
-            ["inline"] = false
-        })
         
         -- Add a timestamp for the webhook
         embedData.embeds[1].timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
@@ -1502,8 +1778,8 @@ if not isInMainMenu then
 
     -- Add premium UI elements to the Tracker tab
     Tabs.Tracker:AddParagraph({
-        Title = "Rewards Tracker",
-        Content = "Thits premium tracker will monior your game progress and send beautifully formatted reward information to Discord when objectives are completed. Includes player stats, mission details, XP amounts, and reward rarities."
+        Title = "✨ Premium Rewards Tracker",
+        Content = "This enhanced tracker monitors your game progress and sends beautifully formatted reward information to Discord. Features game thumbnails, player stats, item rarity sorting and dynamic styling based on reward quality."
     })
 
     -- Add URL input for Discord webhook with verification
@@ -1538,16 +1814,18 @@ if not isInMainMenu then
         Description = "Send a test message to verify your webhook is working",
         Callback = function()
             local testRewards = {
-                {Name = "Test Item - Common", Quantity = "1"},
-                {Name = "Test Weapon - Rare", Quantity = "2"},
-                {Name = "Test Material - Epic", Quantity = "5"},
-                {Name = "Test Legendary Item - Legendary", Quantity = "1"}
+                {Name = "Test Common Item", Quantity = "1"},
+                {Name = "Test Uncommon Weapon", Quantity = "2"},
+                {Name = "Test Rare Material", Quantity = "5"},
+                {Name = "Test Epic Armor", Quantity = "1"},
+                {Name = "Test Legendary Sword", Quantity = "1"}
             }
             
             local testQuantities = {
                 {Name = "XP", Amount = "1,250"},
                 {Name = "Gold", Amount = "500"},
-                {Name = "Gems", Amount = "25"}
+                {Name = "Gems", Amount = "25"},
+                {Name = "Tokens", Amount = "75"}
             }
             
             sendPremiumEmbed(testRewards, testQuantities)
@@ -1556,10 +1834,22 @@ if not isInMainMenu then
 else
     -- Add a message for Tracker tab when in main menu
     Tabs.Tracker:AddParagraph({
-        Title = "Rewards Tracker Unavailable",
-        Content = "The rewards tracker is only available during missions. Please join a mission to track and send rewards to Discord."
+        Title = "✨ Premium Rewards Tracker Unavailable",
+        Content = "The enhanced rewards tracker is only available during missions. Please join a mission to track and send beautifully formatted rewards to Discord."
     })
 end
+
+-- Force Retry button with your server hop script
+Tabs.Teleport:AddButton({
+    Title = "Force Retry",
+    Description = "Retry current game/mission",
+    Callback = function()
+        local TeleportService = game:GetService("TeleportService")
+        local player = game.Players.LocalPlayer
+        local currentPlaceId = game.PlaceId
+        TeleportService:Teleport(currentPlaceId, player)
+    end
+})
 
 
 -- Force Retry button with your server hop script
