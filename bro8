@@ -1793,7 +1793,7 @@ if not isInMainMenu then
 
     -- Add premium UI elements to the Tracker tab
     Tabs.Tracker:AddParagraph({
-        Title = "Rewards Tracker Pro",
+        Title = "Rewards Tracker",
         Content = "This enhanced tracker monitors your game progress and sends beautifully formatted reward information to Discord."
     })
 
@@ -1849,10 +1849,11 @@ if not isInMainMenu then
 else
     -- Add a message for Tracker tab when in main menu
     Tabs.Tracker:AddParagraph({
-        Title = "Rewards Tracker Pro",
-        Content = "The enhanced rewards tracker is only available during missions. Please join a mission to track and send beautifully formatted rewards to Discord."
+        Title = "Rewards Tracker",
+        Content = "rewards tracker is only available during missions. Please join a mission to track and send beautifully formatted rewards to Discord."
     })
 end
+
 
 -- Force Retry button with your server hop script
 Tabs.Teleport:AddButton({
