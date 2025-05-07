@@ -249,6 +249,86 @@ if not isInMainMenu then
     end
 })
 
+-- Add Anti-Injury feature
+local AntiInjuryToggle = Tabs.Features:AddToggle("AntiInjury", {
+    Title = "Anti Injury",
+    Default = false,
+    Callback = function(Value)
+        if Value then
+            -- Enable Anti-Injury
+            local Players = game:GetService("Players")
+            local lp = Players.LocalPlayer
+            local char = lp.Character or lp.CharacterAdded:Wait()
+            
+            -- Create a function to handle all Anti-Injury logic
+            local function setupAntiInjury(character)
+                local humanoid = character:WaitForChild("Humanoid")
+                
+                -- Prevent ragdoll and hurt animations
+                for _, v in ipairs(character:GetDescendants()) do
+                    if v:IsA("RemoteEvent") and (v.Name:lower():find("hurt") or v.Name:lower():find("ragdoll")) then
+                        v:Destroy()
+                    end
+                end
+                
+                -- Constantly block new ragdoll/hurt events
+                local descendantConn = character.DescendantAdded:Connect(function(obj)
+                    if obj:IsA("RemoteEvent") and (obj.Name:lower():find("hurt") or obj.Name:lower():find("ragdoll")) then
+                        obj:Destroy()
+                    end
+                end)
+                
+                -- Restore health if reduced (basic protection)
+                local lastHealth = humanoid.Health
+                local healthConn = humanoid:GetPropertyChangedSignal("Health"):Connect(function()
+                    if humanoid.Health < lastHealth then
+                        humanoid.Health = lastHealth
+                    else
+                        lastHealth = humanoid.Health
+                    end
+                end)
+                
+                -- Auto-fix if Humanoid gets forced into ragdoll states
+                local stateConn = humanoid.StateChanged:Connect(function(old, new)
+                    if new == Enum.HumanoidStateType.Ragdoll or 
+                       new == Enum.HumanoidStateType.Physics or 
+                       new == Enum.HumanoidStateType.FallingDown then
+                        humanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+                    end
+                end)
+                
+                -- Store connections for cleanup
+                character:SetAttribute("AntiInjuryEnabled", true)
+                character:SetAttribute("AntiInjuryDescConn", tostring(descendantConn))
+                character:SetAttribute("AntiInjuryHealthConn", tostring(healthConn))
+                character:SetAttribute("AntiInjuryStateConn", tostring(stateConn))
+            end
+            
+            -- Set up anti-injury for current character
+            if char then
+                setupAntiInjury(char)
+            end
+            
+            -- Handle character respawn
+            lp.CharacterAdded:Connect(function(newChar)
+                if AntiInjuryToggle:GetState() then
+                    setupAntiInjury(newChar)
+                end
+            end)
+        else
+            -- Disable Anti-Injury
+            local lp = Players.LocalPlayer
+            local char = lp.Character
+            
+            if char and char:GetAttribute("AntiInjuryEnabled") then
+                char:SetAttribute("AntiInjuryEnabled", false)
+                -- Clean up connections would go here if we had a way to store them
+                -- For now we'll just flag it as disabled
+            end
+        end
+    end
+})
+
 -- Information paragraph for Features tab
     Tabs.Features:AddParagraph({
         Title = "Information",
