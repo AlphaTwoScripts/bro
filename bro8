@@ -296,7 +296,7 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
             local Options = {
                 AutoFarm = { Value = true },
                 NapeExtender = { Value = true },
-                HitboxSize = { Value = 25 },
+                HitboxSize = { Value = 35 },
                 MoveSpeed = 120,
                 SlashSpeed = 130,
                 SlashDistance = 15,
@@ -832,7 +832,7 @@ end)
 local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
     Title = "Auto Blade Reload",
     Default = false,
-    Description = "Automatically reloads blades when they break (using server remotes)",
+    Description = "Automatically reloads blades when Blade_1 becomes fully transparent",
     Callback = function(Value)
         if Value then
             -- Variables for blade reload
@@ -909,27 +909,13 @@ local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
                 -- Check if both hands exist
                 if not (rightHand and leftHand) then return end
                 
-                -- Find the blade objects in the hands
-                local rightBlade = nil
-                local leftBlade = nil
+                -- Look specifically for Blade_1 in each hand
+                local rightBlade = rightHand:FindFirstChild("Blade_1")
+                local leftBlade = leftHand:FindFirstChild("Blade_1")
                 
-                for _, item in pairs(rightHand:GetChildren()) do
-                    if item:IsA("BasePart") and item.Name:find("Blade") then
-                        rightBlade = item
-                        break
-                    end
-                end
-                
-                for _, item in pairs(leftHand:GetChildren()) do
-                    if item:IsA("BasePart") and item.Name:find("Blade") then
-                        leftBlade = item
-                        break
-                    end
-                end
-                
-                -- Check transparency of either blade
-                if (rightBlade and rightBlade.Transparency >= 0.9) or 
-                   (leftBlade and leftBlade.Transparency >= 0.9) then
+                -- Check if either Blade_1 has exactly Transparency = 1
+                if (rightBlade and rightBlade.Transparency == 1) or 
+                   (leftBlade and leftBlade.Transparency == 1) then
                     -- Try remote first, with fallback to key press
                     local success = pcall(function()
                         reloadBladesViaRemote()
@@ -954,7 +940,7 @@ local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
             
             Fluent:Notify({
                 Title = "Auto Blade Reload Enabled",
-                Content = "Will automatically reload blades when they break (using server remotes)",
+                Content = "Will automatically reload when Blade_1 becomes fully transparent",
                 Duration = 3
             })
         end
@@ -1175,33 +1161,23 @@ if not isInMainMenu then
     local function getRarityInfo(itemName)
         local rarityData = {
             Legendary = {
-                color = 0xF1C40F, -- Gold
-                emoji = "🔱",
-                border = "═════════════════════",
+                color = 0xF7DF1E, -- Modern gold
                 displayName = "LEGENDARY"
             },
             Epic = {
-                color = 0x9B59B6, -- Purple
-                emoji = "⚜️",
-                border = "─────────────────────",
+                color = 0x9D4EDD, -- Modern purple
                 displayName = "EPIC"
             },
             Rare = {
-                color = 0x3498DB, -- Blue
-                emoji = "🔷",
-                border = "─────────────────────",
+                color = 0x3A86FF, -- Modern blue
                 displayName = "RARE"
             },
             Uncommon = {
-                color = 0x2ECC71, -- Green
-                emoji = "🔰",
-                border = "─────────────────────",
+                color = 0x38B000, -- Modern green
                 displayName = "UNCOMMON"
             },
             Common = {
-                color = 0x95A5A6, -- Gray
-                emoji = "⚪",
-                border = "─────────────────────", 
+                color = 0x6C757D, -- Modern gray
                 displayName = "COMMON"
             }
         }
@@ -1260,12 +1236,12 @@ if not isInMainMenu then
             return
         end
         
-        -- Get current time in a nice format
+        -- Get current time
         local date = os.date("*t")
         local formattedTime = string.format("%02d/%02d/%d %02d:%02d:%02d", 
             date.month, date.day, date.year, date.hour, date.min, date.sec)
             
-        -- Get player avatar for the embed
+        -- Get player info
         local LocalPlayer = Players.LocalPlayer
         local userId = LocalPlayer.UserId
         local playerName = LocalPlayer.Name
@@ -1275,44 +1251,90 @@ if not isInMainMenu then
         -- Get game information
         local gameInfo = getGameInfo()
         
-        -- Generate a random color for the embed sidebar
-        local primaryColor = 0x5865F2 -- Discord brand blue
-        
-        -- Get player streak from UI
-        local streak = "Unknown"
-        local success, result = pcall(function()
-            local streakUI = LocalPlayer.PlayerGui.Interface.Details.Prompt.Main.List.Robloxmlc_1.Streak
-            if streakUI and streakUI:IsA("TextLabel") then
-                return streakUI.Text
-            elseif streakUI and (streakUI:IsA("IntValue") or streakUI:IsA("NumberValue")) then
-                return tostring(streakUI.Value)
+        -- Get player level
+        local level = "Unknown"
+        local levelSuccess, levelResult = pcall(function()
+            local levelUI = game:GetService("Players").LocalPlayer.PlayerGui.Interface.Spectate.Inner.Main.Level
+            if levelUI and levelUI:IsA("TextLabel") then
+                return levelUI.Text
+            elseif levelUI and (levelUI:IsA("IntValue") or levelUI:IsA("NumberValue")) then
+                return tostring(levelUI.Value)
             end
             return "Unknown"
         end)
         
-        if success and result then
-            streak = result
+        if levelSuccess and levelResult then
+            level = levelResult
         end
         
-        -- Calculate total XP, gold, and items
-        local totalXP = 0
-        local totalGold = 0
-        local totalGems = 0
-        local totalItems = 0
-        local hasLegendary = false
-        local hasEpic = false
+        -- Get Time Taken from the UI
+        local timeTaken = "Unknown"
+        local timeSuccess, timeResult = pcall(function()
+            local timeUI = LocalPlayer.PlayerGui.Interface.Rewards.Main.Info.Main.Stats.Time_Taken.Amount
+            if timeUI and timeUI:IsA("TextLabel") then
+                return timeUI.Text
+            end
+            return "Unknown"
+        end)
         
-        -- Process XP/Gold/Gems
+        if timeSuccess and timeResult then
+            timeTaken = timeResult
+        end
+        
+        -- Get Critical Hits from the UI
+        local criticalHits = "Unknown"
+        local critSuccess, critResult = pcall(function()
+            local critUI = game:GetService("Players").LocalPlayer.PlayerGui.Interface.Rewards.Main.Info.Main.Stats.Critical_Hits.Amount
+            if critUI and critUI:IsA("TextLabel") then
+                return critUI.Text
+            end
+            return "Unknown"
+        end)
+        
+        if critSuccess and critResult then
+            criticalHits = critResult
+        end
+        
+        -- Get Damage Dealt from the UI
+        local damageDealt = "Unknown"
+        local damageSuccess, damageResult = pcall(function()
+            local damageUI = game:GetService("Players").LocalPlayer.PlayerGui.Interface.Rewards.Main.Info.Main.Stats.Damage_Dealt.Amount
+            if damageUI and damageUI:IsA("TextLabel") then
+                return damageUI.Text
+            end
+            return "Unknown"
+        end)
+        
+        if damageSuccess and damageResult then
+            damageDealt = damageResult
+        end
+        
+        -- Get Titans Killed from the UI
+        local titansKilled = "Unknown"
+        local titansSuccess, titansResult = pcall(function()
+            local titansUI = game:GetService("Players").LocalPlayer.PlayerGui.Interface.Rewards.Main.Info.Main.Stats.Titans_Killed.Amount
+            if titansUI and titansUI:IsA("TextLabel") then
+                return titansUI.Text
+            end
+            return "Unknown"
+        end)
+        
+        if titansSuccess and titansResult then
+            titansKilled = titansResult
+        end
+        
+        -- Process rewards data
+        local totalXP, totalGold, totalGems, totalItems = 0, 0, 0, 0
+        local hasLegendary, hasEpic = false, false
+        
+        -- Process quantities
         if quantities and #quantities > 0 then
             for _, reward in ipairs(quantities) do
                 local amount = tonumber(string.match(reward.Amount or "0", "%d+") or 0)
                 
-                if reward.Name == "XP" then
-                    totalXP = amount
-                elseif reward.Name == "Gold" then
-                    totalGold = amount
-                elseif reward.Name == "Gems" then
-                    totalGems = amount
+                if reward.Name == "XP" then totalXP = amount
+                elseif reward.Name == "Gold" then totalGold = amount
+                elseif reward.Name == "Gems" then totalGems = amount
                 end
             end
         end
@@ -1323,42 +1345,31 @@ if not isInMainMenu then
             for _, item in ipairs(data) do
                 local itemName = item.Name or "Unknown Item"
                 
-                if string.find(string.lower(itemName), "legendary") then
-                    hasLegendary = true
-                elseif string.find(string.lower(itemName), "epic") then
-                    hasEpic = true
+                if string.find(string.lower(itemName), "legendary") then hasLegendary = true
+                elseif string.find(string.lower(itemName), "epic") then hasEpic = true
                 end
             end
         end
         
-        -- Choose appropriate title based on rewards quality
-        local embedTitle = "🏆 **MISSION REWARDS**"
-        local embedDescription = ""
-        
+        -- Determine embed color based on rewards quality
+        local embedColor
         if hasLegendary then
-            embedTitle = "✨ **LEGENDARY REWARDS ACQUIRED!** ✨"
-            embedDescription = "**" .. playerName .. "** just hit the jackpot with **LEGENDARY** loot!"
-            primaryColor = 0xF1C40F -- Gold for legendary
+            embedColor = 0xF7DF1E -- Gold for legendary
         elseif hasEpic then
-            embedTitle = "💜 **EPIC REWARDS CLAIMED!** 💜"
-            embedDescription = "**" .. playerName .. "** discovered **EPIC** treasures!"
-            primaryColor = 0x9B59B6 -- Purple for epic
+            embedColor = 0x9D4EDD -- Purple for epic
         elseif totalXP > 1000 or totalGold > 500 or totalGems > 10 then
-            embedTitle = "💰 **PREMIUM REWARDS EARNED!** 💰"
-            embedDescription = "**" .. playerName .. "** completed a mission with valuable rewards!"
-            primaryColor = 0x3498DB -- Blue for good rewards
+            embedColor = 0x3A86FF -- Blue for good rewards
         else
-            embedDescription = "**" .. playerName .. "** completed a mission successfully!"
+            embedColor = 0x111827 -- Default dark
         end
         
-        -- Build the premium embed
+        -- Create clean embed design
         local embedData = {
             ["content"] = nil,
             ["embeds"] = {
                 {
-                    ["title"] = embedTitle,
-                    ["description"] = embedDescription,
-                    ["color"] = primaryColor,
+                    ["title"] = hasLegendary and "Legendary Rewards" or hasEpic and "Epic Rewards" or "Mission Rewards",
+                    ["color"] = embedColor,
                     ["fields"] = {},
                     ["author"] = {
                         ["name"] = displayName .. " (@" .. playerName .. ")",
@@ -1374,62 +1385,51 @@ if not isInMainMenu then
             }
         }
         
-        -- Add player info field with enhanced formatting
+        -- Add player and mission info in a clean format
         table.insert(embedData.embeds[1].fields, {
-            ["name"] = "👤 **PLAYER STATS**",
-            ["value"] = "**Daily Streak:** `" .. streak .. "` 🔥\n" ..
-                      "**Player ID:** `" .. userId .. "`\n" ..
-                      "**Server:** `" .. (game.JobId or "Unknown") .. "`",
+            ["name"] = "Player Information",
+            ["value"] = string.format("**Level:** %s\n**Mission Time:** %s", 
+                                     level, timeTaken),
             ["inline"] = true
         })
         
-        -- Add mission info field with enhanced formatting
         table.insert(embedData.embeds[1].fields, {
-            ["name"] = "🎮 **MISSION INFO**",
-            ["value"] = "**Mission:** `" .. gameInfo.GameName .. "`\n" ..
-                      "**Place ID:** `" .. gameInfo.PlaceId .. "`\n" ..
-                      "**Time:** `" .. os.date("%H:%M:%S") .. "`",
+            ["name"] = "Mission",
+            ["value"] = string.format("**%s**\nID: %s", 
+                                     gameInfo.GameName, gameInfo.PlaceId),
             ["inline"] = true
         })
         
-        -- Add a visual divider
+        -- Add combat statistics
         table.insert(embedData.embeds[1].fields, {
-            ["name"] = "⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯",
-            ["value"] = "",
+            ["name"] = "Combat Statistics",
+            ["value"] = string.format("**Critical Hits:** %s\n**Damage Dealt:** %s\n**Titans Killed:** %s", 
+                                     criticalHits, damageDealt, titansKilled),
             ["inline"] = false
         })
         
-        -- Add currency rewards section with icons and formatting
+        -- Add clean currencies section
         if quantities and #quantities > 0 then
-            local currencyFields = {}
+            local currencyValues = {}
             
             for _, reward in ipairs(quantities) do
-                local icon = "💰"
-                if reward.Name == "XP" then
-                    icon = "✨"
-                elseif reward.Name == "Gems" then
-                    icon = "💎"
-                elseif reward.Name == "Tokens" then
-                    icon = "🔮"
-                elseif reward.Name == "Points" then
-                    icon = "🏅"
-                elseif reward.Name == "Coins" then
-                    icon = "🪙"
-                end
-                
-                table.insert(currencyFields, icon .. " **" .. reward.Name .. ":** `" .. formatNumber(reward.Amount) .. "`")
+                table.insert(currencyValues, 
+                    string.format("**%s:** %s", 
+                    reward.Name, formatNumber(reward.Amount)))
             end
             
-            table.insert(embedData.embeds[1].fields, {
-                ["name"] = "💰 **CURRENCIES EARNED**",
-                ["value"] = table.concat(currencyFields, "\n"),
-                ["inline"] = false
-            })
+            if #currencyValues > 0 then
+                table.insert(embedData.embeds[1].fields, {
+                    ["name"] = "Currencies Earned",
+                    ["value"] = table.concat(currencyValues, " • "),
+                    ["inline"] = false
+                })
+            end
         end
         
-        -- Add item rewards section with rarity formatting
+        -- Process items by rarity for a clean display
         if data and #data > 0 then
-            -- Group items by rarity for better organization
+            -- Group items by rarity
             local itemsByRarity = {
                 Legendary = {},
                 Epic = {},
@@ -1455,102 +1455,39 @@ if not isInMainMenu then
                 end
             end
             
-            -- Format items by rarity with appropriate styling
-            local itemsText = ""
+            -- Add each rarity section if it has items
+            local rarityTypes = {"Legendary", "Epic", "Rare", "Uncommon", "Common"}
             
-            -- Legendary items (with special formatting)
-            if #itemsByRarity.Legendary > 0 then
-                local legendaryInfo = getRarityInfo("Legendary")
-                
-                itemsText = itemsText .. legendaryInfo.border .. "\n"
-                itemsText = itemsText .. legendaryInfo.emoji .. " **" .. legendaryInfo.displayName .. "** " .. legendaryInfo.emoji .. "\n"
-                itemsText = itemsText .. legendaryInfo.border .. "\n"
-                
-                for _, item in ipairs(itemsByRarity.Legendary) do
-                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
-                end
-                
-                itemsText = itemsText .. "\n"
-            end
-            
-            -- Epic items
-            if #itemsByRarity.Epic > 0 then
-                local epicInfo = getRarityInfo("Epic")
-                
-                itemsText = itemsText .. epicInfo.emoji .. " **" .. epicInfo.displayName .. "** " .. epicInfo.emoji .. "\n"
-                itemsText = itemsText .. epicInfo.border .. "\n"
-                
-                for _, item in ipairs(itemsByRarity.Epic) do
-                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
-                end
-                
-                itemsText = itemsText .. "\n"
-            end
-            
-            -- Rare items
-            if #itemsByRarity.Rare > 0 then
-                local rareInfo = getRarityInfo("Rare")
-                
-                itemsText = itemsText .. rareInfo.emoji .. " **" .. rareInfo.displayName .. "** " .. rareInfo.emoji .. "\n"
-                itemsText = itemsText .. rareInfo.border .. "\n"
-                
-                for _, item in ipairs(itemsByRarity.Rare) do
-                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
-                end
-                
-                itemsText = itemsText .. "\n"
-            end
-            
-            -- Uncommon items
-            if #itemsByRarity.Uncommon > 0 then
-                local uncommonInfo = getRarityInfo("Uncommon")
-                
-                itemsText = itemsText .. uncommonInfo.emoji .. " **" .. uncommonInfo.displayName .. "** " .. uncommonInfo.emoji .. "\n"
-                itemsText = itemsText .. uncommonInfo.border .. "\n"
-                
-                for _, item in ipairs(itemsByRarity.Uncommon) do
-                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
-                end
-                
-                itemsText = itemsText .. "\n"
-            end
-            
-            -- Common items (grouped at the end)
-            if #itemsByRarity.Common > 0 then
-                local commonInfo = getRarityInfo("Common")
-                
-                itemsText = itemsText .. commonInfo.emoji .. " **" .. commonInfo.displayName .. "** " .. commonInfo.emoji .. "\n"
-                itemsText = itemsText .. commonInfo.border .. "\n"
-                
-                for _, item in ipairs(itemsByRarity.Common) do
-                    itemsText = itemsText .. "➤ `" .. item.name .. item.quantity .. "`\n"
+            for _, rarityType in ipairs(rarityTypes) do
+                local rarityItems = itemsByRarity[rarityType]
+                if #rarityItems > 0 then
+                    local itemsList = {}
+                    for _, item in ipairs(rarityItems) do
+                        table.insert(itemsList, item.name .. item.quantity)
+                    end
+                    
+                    table.insert(embedData.embeds[1].fields, {
+                        ["name"] = rarityType .. " Items",
+                        ["value"] = "```\n" .. table.concat(itemsList, "\n") .. "\n```",
+                        ["inline"] = false
+                    })
                 end
             end
-            
-            if itemsText == "" then
-                itemsText = "No specific items found."
-            end
-            
-            table.insert(embedData.embeds[1].fields, {
-                ["name"] = "💎 **ITEMS ACQUIRED** (" .. totalItems .. " total)",
-                ["value"] = itemsText,
-                ["inline"] = false
-            })
         else
             table.insert(embedData.embeds[1].fields, {
-                ["name"] = "💎 **ITEMS ACQUIRED**",
-                ["value"] = "No specific items found in the rewards.",
+                ["name"] = "Items Acquired",
+                ["value"] = "No items found in rewards.",
                 ["inline"] = false
             })
         end
         
-        -- Add a timestamp for the webhook
+        -- Add timestamp for the webhook
         embedData.embeds[1].timestamp = os.date("!%Y-%m-%dT%H:%M:%SZ")
         
         -- Convert to JSON
         local jsonData
         
-        -- Try both methods of JSON encoding
+        -- Try JSON encoding
         local success, result = pcall(function()
             if HttpService then
                 return HttpService:JSONEncode(embedData)
@@ -1572,70 +1509,52 @@ if not isInMainMenu then
             return
         end
         
-        -- Try to send webhook using multiple methods
+        -- Try to send webhook using different methods
         local sent = false
-        
-        -- Method 1: Using HttpService:PostAsync
-        if not sent and HttpService then
-            local success, response = pcall(function()
-                return HttpService:PostAsync(url, jsonData, Enum.HttpContentType.ApplicationJson, false)
-            end)
-            
-            if success then
-                sent = true
-                Fluent:Notify({
-                    Title = "Success!",
-                    Content = "Rewards have been sent to Discord successfully (Method 1)",
-                    Duration = 5
-                })
-            else
-                print("Method 1 failed: " .. tostring(response))
+        local methods = {
+            -- Method 1: Using HttpService:PostAsync
+            function()
+                if HttpService then
+                    return HttpService:PostAsync(url, jsonData, Enum.HttpContentType.ApplicationJson, false)
+                end
+                return nil
+            end,
+            -- Method 2: Using request function
+            function()
+                if request then
+                    return request({
+                        Url = url, 
+                        Method = "POST", 
+                        Body = jsonData, 
+                        Headers = {["content-type"] = "application/json"}
+                    })
+                end
+                return nil
+            end,
+            -- Method 3: Using syn.request (for Synapse X)
+            function()
+                if syn and syn.request then
+                    return syn.request({
+                        Url = url,
+                        Method = "POST",
+                        Body = jsonData,
+                        Headers = {["content-type"] = "application/json"}
+                    })
+                end
+                return nil
             end
-        end
+        }
         
-        -- Method 2: Using request function
-        if not sent and request then
-            local success, response = pcall(function()
-                return request({
-                    Url = url, 
-                    Method = "POST", 
-                    Body = jsonData, 
-                    Headers = {["content-type"] = "application/json"}
-                })
-            end)
-            
-            if success then
+        for i, method in ipairs(methods) do
+            local success, response = pcall(method)
+            if success and response then
                 sent = true
                 Fluent:Notify({
                     Title = "Success!",
-                    Content = "Rewards have been sent to Discord successfully (Method 2)",
+                    Content = "Rewards sent to Discord successfully",
                     Duration = 5
                 })
-            else
-                print("Method 2 failed: " .. tostring(response))
-            end
-        end
-        
-        -- Method 3: Using syn.request (for Synapse X)
-        if not sent and syn and syn.request then
-            local success, response = pcall(function()
-                return syn.request({
-                    Url = url,
-                    Method = "POST",
-                    Body = jsonData,
-                    Headers = {["content-type"] = "application/json"}
-                })
-            end)
-            
-            if success then
-                sent = true
-                Fluent:Notify({
-                    Title = "Success!",
-                    Content = "Rewards have been sent to Discord successfully (Method 3)",
-                    Duration = 5
-                })
-            else
-                print("Method 3 failed: " .. tostring(response))
+                break
             end
         end
         
@@ -1653,7 +1572,7 @@ if not isInMainMenu then
     local RewardsToggle = Tabs.Tracker:AddToggle("RewardsTracker", {
         Title = "Rewards Tracker",
         Default = true,
-        Description = "",
+        Description = "Automatically track and send mission rewards to Discord",
         Callback = function(Value)
             if Value then
                 -- Create a new thread to avoid freezing the UI
@@ -1778,8 +1697,8 @@ if not isInMainMenu then
 
     -- Add premium UI elements to the Tracker tab
     Tabs.Tracker:AddParagraph({
-        Title = "✨ Premium Rewards Tracker",
-        Content = "This enhanced tracker monitors your game progress and sends beautifully formatted reward information to Discord. Features game thumbnails, player stats, item rarity sorting and dynamic styling based on reward quality."
+        Title = "Rewards Tracker Pro",
+        Content = "This enhanced tracker monitors your game progress and sends beautifully formatted reward information to Discord."
     })
 
     -- Add URL input for Discord webhook with verification
@@ -1834,23 +1753,10 @@ if not isInMainMenu then
 else
     -- Add a message for Tracker tab when in main menu
     Tabs.Tracker:AddParagraph({
-        Title = "✨ Premium Rewards Tracker Unavailable",
+        Title = "Rewards Tracker Pro",
         Content = "The enhanced rewards tracker is only available during missions. Please join a mission to track and send beautifully formatted rewards to Discord."
     })
 end
-
--- Force Retry button with your server hop script
-Tabs.Teleport:AddButton({
-    Title = "Force Retry",
-    Description = "Retry current game/mission",
-    Callback = function()
-        local TeleportService = game:GetService("TeleportService")
-        local player = game.Players.LocalPlayer
-        local currentPlaceId = game.PlaceId
-        TeleportService:Teleport(currentPlaceId, player)
-    end
-})
-
 
 -- Force Retry button with your server hop script
 Tabs.Teleport:AddButton({
