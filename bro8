@@ -832,7 +832,7 @@ end)
 local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
     Title = "Auto Blade Reload",
     Default = false,
-    Description = "Automatically reloads blades when Blade_1 becomes fully transparent",
+    Description = "",
     Callback = function(Value)
         if Value then
             -- Variables for blade reload
@@ -940,7 +940,7 @@ local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
             
             Fluent:Notify({
                 Title = "Auto Blade Reload Enabled",
-                Content = "Will automatically reload when Blade_1 becomes fully transparent",
+                Content = "",
                 Duration = 3
             })
         end
