@@ -792,33 +792,49 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                         targetedTitan = true
                         currentTargetTitan = titan  -- Set current target titan
 
-                        if Options.NapeExtender.Value then
-                            -- Create a tall hitbox that reaches the fixed height
-                            -- Get the titan's base position
-                            local titanBase = nape.Position
-                            
-                            -- Calculate the height needed to reach from titan to our fixed height
-                            local heightDifference = math.abs(Options.AttackHeight.Value - titanBase.Y)
-                            
-                            -- Make the nape hitbox tall enough to reach the player
-                            nape.Size = Vector3.new(
-                                Options.HitboxSize.Value,  -- Width X
-                                heightDifference + 60,    -- Height Y (tall enough to reach)
-                                Options.HitboxSize.Value   -- Width Z
-                            )
-                            
-                            -- Position the nape so it extends from titan up to our height
-                            local midPoint = (titanBase.Y + Options.AttackHeight.Value) / 2
-                            nape.Position = Vector3.new(
-                                titanBase.X,
-                                midPoint,  -- Middle of the hitbox between titan and player height
-                                titanBase.Z
-                            )
-                            
-                            nape.Transparency = 1
-                            nape.CanCollide = false
-                        end
+-- Find the NapeExtender code in the autoFarm function and replace it with this:
 
+if Options.NapeExtender.Value then
+    -- Check if this is a crawler titan by looking at its attributes
+    local isCrawler = titan:GetAttribute("Type") == "Crawler"
+    
+    local titanBase = nape.Position
+    local heightDifference = math.abs(Options.AttackHeight.Value - titanBase.Y)
+    
+    if isCrawler then
+        -- For crawlers: make a large vertical column that's guaranteed to hit
+        nape.Size = Vector3.new(
+            Options.HitboxSize.Value * 1.5,    -- Much wider X
+            heightDifference * 1,            -- Very tall to guarantee hit
+            Options.HitboxSize.Value * 11     -- Much deeper Z
+        )
+        
+        -- Position directly above the crawler
+        nape.Position = Vector3.new(
+            titanBase.X,
+            (titanBase.Y + Options.AttackHeight.Value) / 2, -- Centered between crawler and player
+            titanBase.Z
+        )
+    else
+        -- Normal titan (unchanged)
+        nape.Size = Vector3.new(
+            Options.HitboxSize.Value,  -- Width X
+            heightDifference + 60,     -- Height Y
+            Options.HitboxSize.Value   -- Width Z
+        )
+        
+        -- Position the nape so it extends from titan up to our height
+        local midPoint = (titanBase.Y + Options.AttackHeight.Value) / 2
+        nape.Position = Vector3.new(
+            titanBase.X,
+            midPoint,
+            titanBase.Z
+        )
+    end
+    
+    nape.Transparency = 0.45
+    nape.CanCollide = false
+end
                         local targetPos = Vector3.new(nape.Position.X, Options.AttackHeight.Value, nape.Position.Z)
                         
                         local success = moveToPosition(targetPos, titan)
