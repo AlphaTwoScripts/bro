@@ -89,107 +89,140 @@ if not isInMainMenu then
         end
     })
 
-    -- Add the autofarm toggle
-    local AutofarmToggle = Tabs.Features:AddToggle("Autofarm", {
-        Title = "OP Autofarm",
-        Default = false,
-        Description = "Required Steel and Trust skills",
-        Callback = function(Value)
-            if Value then
-                local Players = game:GetService("Players")
-                local workspace = game:GetService("Workspace")
-                local VIP = game:GetService("VirtualInputManager")
-                local ReplicatedStorage = game:GetService("ReplicatedStorage")
-                local RunService = game:GetService("RunService")
+-- Add the autofarm toggle
+local AutofarmToggle = Tabs.Features:AddToggle("Autofarm", {
+    Title = "OP Autofarm",
+    Default = false,
+    Description = "Required Steel and Trust skills",
+    Callback = function(Value)
+        if Value then
+            local Players = game:GetService("Players")
+            local workspace = game:GetService("Workspace")
+            local VIP = game:GetService("VirtualInputManager")
+            local ReplicatedStorage = game:GetService("ReplicatedStorage")
+            local RunService = game:GetService("RunService")
+            local UserInputService = game:GetService("UserInputService")
 
-                local player = Players.LocalPlayer
-                local character = player.Character or player.CharacterAdded:Wait()
-                local rootPart = character:WaitForChild("HumanoidRootPart")
+            -- Detect if we're on mobile
+            local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
-                -- Enlarge titan hitboxes
-                local titans = workspace.Titans:GetChildren()
-                for _, titan in ipairs(titans) do
-                    local Hitboxes = titan:FindFirstChild("Hitboxes")
-                    if Hitboxes then
-                        local Hit = Hitboxes:FindFirstChild("Hit")
-                        if Hit then
-                            local Nape = Hit:FindFirstChild("Nape")
-                            if Nape then
-                                print("Found Nape")
-                                
-                                -- Resize the Nape hitbox
-                                Nape.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
-                                
-                                -- Teleport Nape to 5 studs in front of the player's character
-                                local frontOffset = rootPart.CFrame.LookVector * 5
-                                Nape.Position = rootPart.Position + frontOffset
-                                
-                                -- Ensure Nape is anchored
-                                Nape.Anchored = true
-                            end
+            local player = Players.LocalPlayer
+            local character = player.Character or player.CharacterAdded:Wait()
+            local rootPart = character:WaitForChild("HumanoidRootPart")
+
+            -- Enlarge titan hitboxes
+            local titans = workspace.Titans:GetChildren()
+            for _, titan in ipairs(titans) do
+                local Hitboxes = titan:FindFirstChild("Hitboxes")
+                if Hitboxes then
+                    local Hit = Hitboxes:FindFirstChild("Hit")
+                    if Hit then
+                        local Nape = Hit:FindFirstChild("Nape")
+                        if Nape then
+                            print("Found Nape")
+                            
+                            -- Resize the Nape hitbox
+                            Nape.Size = Vector3.new(Options.HitboxSize.Value, Options.HitboxSize.Value, Options.HitboxSize.Value)
+                            
+                            -- Teleport Nape to 5 studs in front of the player's character
+                            local frontOffset = rootPart.CFrame.LookVector * 5
+                            Nape.Position = rootPart.Position + frontOffset
+                            
+                            -- Ensure Nape is anchored
+                            Nape.Anchored = true
                         end
                     end
                 end
+            end
 
-                -- The fixed position you want to lock the player to
-                local fixedPosition = Vector3.new(rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
-                
-                -- Allowable vertical movement range
-                local verticalRange = 5
-                
-                -- Function to keep the player in place
-                local function keepPlayerInPlace()
-                    local yPos = math.clamp(rootPart.Position.Y, fixedPosition.Y - verticalRange, fixedPosition.Y + verticalRange)
-                    rootPart.CFrame = CFrame.new(fixedPosition.X, yPos, fixedPosition.Z)
-                end
-                
-                -- Run the function on every frame
-                local connectionRef = RunService.RenderStepped:Connect(keepPlayerInPlace)
-                
-                -- Simulate key event for the first skill
-                VIP:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+            -- The fixed position you want to lock the player to
+            local fixedPosition = Vector3.new(rootPart.Position.X, rootPart.Position.Y, rootPart.Position.Z)
+            
+            -- Allowable vertical movement range
+            local verticalRange = 5
+            
+            -- Function to keep the player in place
+            local function keepPlayerInPlace()
+                local yPos = math.clamp(rootPart.Position.Y, fixedPosition.Y - verticalRange, fixedPosition.Y + verticalRange)
+                rootPart.CFrame = CFrame.new(fixedPosition.X, yPos, fixedPosition.Z)
+            end
+            
+            -- Run the function on every frame
+            local connectionRef = RunService.RenderStepped:Connect(keepPlayerInPlace)
+            
+            -- Simulate key event for the first skill
+            VIP:SendKeyEvent(true, Enum.KeyCode.One, false, game)
+            task.wait(0.1)
+            
+            -- Find Thrust and Steel parts and modify them
+            local Thrust = workspace:FindFirstChild("HakerOreoScary_Thrust")
+            local Steel = workspace:FindFirstChild("HakerOreoScary_Steel")
+            
+            if Thrust then
+                Thrust.Size = Vector3.new(1999, 1999, 1999)
+                Thrust.CanCollide = false
+            end
+            
+            task.wait(2)
+            
+            -- Simulate key event for the second skill
+            VIP:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
+            task.wait(0.1)
+            
+            if Steel then
+                Steel.Size = Vector3.new(1999, 1999, 1999)
+                Steel.CanCollide = false
+            end
+            
+            -- Path to the Slay object
+            local Slay = ReplicatedStorage.Objectives:WaitForChild("Slay")
+            
+            -- Requirement attribute
+            local requirement = Slay:GetAttribute("Requirement")
+            
+            -- Wait for Slay.Value to meet the requirement before proceeding with key events
+            while Slay.Value ~= requirement do
                 task.wait(0.1)
-                
-                -- Find Thrust and Steel parts and modify them
-                local Thrust = workspace:FindFirstChild("HakerOreoScary_Thrust")
-                local Steel = workspace:FindFirstChild("HakerOreoScary_Steel")
-                
-                if Thrust then
-                    Thrust.Size = Vector3.new(1999, 1999, 1999)
-                    Thrust.CanCollide = false
-                end
-                
-                task.wait(2)
-                
-                -- Simulate key event for the second skill
-                VIP:SendKeyEvent(true, Enum.KeyCode.Two, false, game)
-                task.wait(0.1)
-                
-                if Steel then
-                    Steel.Size = Vector3.new(1999, 1999, 1999)
-                    Steel.CanCollide = false
-                end
-                
-                -- Path to the Slay object
-                local Slay = ReplicatedStorage.Objectives:WaitForChild("Slay")
-                
-                -- Requirement attribute
-                local requirement = Slay:GetAttribute("Requirement")
-                
-                -- Wait for Slay.Value to meet the requirement before proceeding with key events
-                while Slay.Value ~= requirement do
-                    task.wait(0.1)
-                    -- Check if toggle was turned off
-                    if not Options.Autofarm.Value then
-                        if connectionRef then
-                            connectionRef:Disconnect()
-                        end
-                        return
+                -- Check if toggle was turned off
+                if not Options.Autofarm.Value then
+                    if connectionRef then
+                        connectionRef:Disconnect()
                     end
+                    return
                 end
+            end
+            
+            task.wait(1)
+            
+            -- UI navigation sequence with mobile support
+            if isMobile then
+                -- Mobile-specific UI navigation
+                VIP:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
+                task.wait(0.2) -- Slightly longer wait for mobile
                 
+                -- Different navigation sequence for mobile
+                -- Try using Down key instead of Right for mobile navigation
+                VIP:SendKeyEvent(true, Enum.KeyCode.Down, false, game)
+                task.wait(0.2)
+                VIP:SendKeyEvent(true, Enum.KeyCode.Down, false, game)
+                task.wait(0.2)
+                -- You might need additional navigation depending on mobile UI
+                VIP:SendKeyEvent(true, Enum.KeyCode.Return, false, game) -- Key down
+                VIP:SendKeyEvent(false, Enum.KeyCode.Return, false, game) -- Key up
+                
+                -- If that doesn't work, add this alternative sequence
                 task.wait(1)
+                if not Options.Autofarm.Value then return end
                 
+                -- Alternative mobile sequence if the first doesn't work
+                VIP:SendKeyEvent(true, Enum.KeyCode.Tab, false, game)
+                task.wait(0.2)
+                VIP:SendKeyEvent(true, Enum.KeyCode.Tab, false, game)
+                task.wait(0.2)
+                VIP:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                VIP:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+            else
+                -- PC navigation sequence
                 VIP:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
                 task.wait(0.1)
                 VIP:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
@@ -199,8 +232,35 @@ if not isInMainMenu then
                 VIP:SendKeyEvent(true, Enum.KeyCode.Return, false, game) -- Key down
                 VIP:SendKeyEvent(false, Enum.KeyCode.Return, false, game) -- Key up
             end
+            
+            -- Restart the autofarm process if still enabled
+            task.wait(3) -- Wait for new round to load
+            if Options.Autofarm.Value then
+                -- Recursive call to restart the autofarm
+                AutofarmToggle:SetValue(true)
+            end
+        else
+            -- Toggle was turned off
+            if connectionRef then
+                connectionRef:Disconnect()
+            end
         end
-    })
+    end
+})
+
+-- Add hitbox size slider
+Tabs.Features:AddSlider("HitboxSize", {
+    Title = "Hitbox Size",
+    Description = "Adjust titan nape hitbox size",
+    Default = 10,
+    Min = 5,
+    Max = 50,
+    Rounding = 0,
+    Callback = function(Value)
+        -- This will be used when autofarm is toggled on
+    end
+})
+                
 
     -- Add a hitbox size slider to Features tab
     local HitboxSlider = Tabs.Features:AddSlider("HitboxSize", {
