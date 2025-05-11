@@ -351,6 +351,9 @@ local SlashModeDropdown = Tabs.Features:AddDropdown("SlashMode", {
     Description = "Your Choice"
 })
 
+-- Store window reference globally for use in the auto-farm feature
+_G.FluentWindow = Window
+
 -- Then create the toggle with the dropdown reference
 local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
     Title = "Auto Farm",
@@ -637,7 +640,7 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                 end
             end)
             
-            -- Check mission completion and auto-retry with rate limiting
+            -- Check mission completion and auto-retry with rate limiting AND UI auto-close
             local function checkMissionCompletion()
                 local lastRetryTime = 0
                 local retryAttempted = false
@@ -712,6 +715,12 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                             local retryButton = buttons:FindFirstChild("Retry")
                             
                             if retryButton then
+                                -- CLOSE THE UI BEFORE CLICKING THE RETRY BUTTON
+                                if _G.FluentWindow then
+                                    _G.FluentWindow:Destroy() -- Close the Fluent UI
+                                end
+                                
+                                -- Now click the retry button which should be visible
                                 local buttonPos = retryButton.AbsolutePosition
                                 local buttonSize = retryButton.AbsoluteSize
                                 
@@ -770,158 +779,101 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                         end
                     end
                     
-                    -- Sort titans by distance (only X and Z, not Y since we're at fixed height)
-                    table.sort(titanList, function(a, b)
-                        local aPos = Vector3.new(a.nape.Position.X, 0, a.nape.Position.Z)
-                        local bPos = Vector3.new(b.nape.Position.X, 0, b.nape.Position.Z)
-                        local playerPos = Vector3.new(hrp.Position.X, 0, hrp.Position.Z)
-                        return (aPos - playerPos).Magnitude < (bPos - playerPos).Magnitude
-                    end)
-
-                    local targetedTitan = false
-                    for _, entry in ipairs(titanList) do
-                        if not _G.SlashThroughHitboxEnabled then break end
-                        
-                        local titan = entry.titan
-                        local nape = entry.nape
-
-                        -- Check again that titan is still valid before targeting
-                        if not isTitanValid(titan) then continue end
-                        
-                        targetedTitan = true
-                        currentTargetTitan = titan  -- Set current target titan
-
--- Find the NapeExtender code in the autoFarm function and replace it with this:
-
-if Options.NapeExtender.Value then
-    -- Check if this is a crawler titan by looking at its attributes
-    local isCrawler = titan:GetAttribute("Type") == "Crawler"
-    
-    local titanBase = nape.Position
-    local heightDifference = math.abs(Options.AttackHeight.Value - titanBase.Y)
-    
-    if isCrawler then
-        -- For crawlers: make a large vertical column that's guaranteed to hit
-        nape.Size = Vector3.new(
-            Options.HitboxSize.Value * 1.5,    -- Much wider X
-            heightDifference * 1,            -- Very tall to guarantee hit
-            Options.HitboxSize.Value * 11     -- Much deeper Z
-        )
-        
-        -- Position directly above the crawler
-        nape.Position = Vector3.new(
-            titanBase.X,
-            (titanBase.Y + Options.AttackHeight.Value) / 2, -- Centered between crawler and player
-            titanBase.Z
-        )
-    else
-        -- Normal titan (unchanged)
-        nape.Size = Vector3.new(
-            Options.HitboxSize.Value,  -- Width X
-            heightDifference + 60,     -- Height Y
-            Options.HitboxSize.Value   -- Width Z
-        )
-        
-        -- Position the nape so it extends from titan up to our height
-        local midPoint = (titanBase.Y + Options.AttackHeight.Value) / 2
-        nape.Position = Vector3.new(
-            titanBase.X,
-            midPoint,
-            titanBase.Z
-        )
-    end
-    
-    nape.Transparency = 0.45
-    nape.CanCollide = false
-end
-                        local targetPos = Vector3.new(nape.Position.X, Options.AttackHeight.Value, nape.Position.Z)
-                        
-                        local success = moveToPosition(targetPos, titan)
-                        if not success then
-                            currentTargetTitan = nil
-                            break
-                        end
-                        
-                        -- Pass titan instance to slashThroughNape
-                        local slashSuccess = slashThroughNape(nape, titan)
-                        if not slashSuccess then
-                            currentTargetTitan = nil
-                            break
+                    -- Find the closest titan by Nape distance
+                    local closestTitan = nil
+                    local closestDistance = math.huge
+                    
+                    for _, titanData in ipairs(titanList) do
+                        local distanceToTitan = (hrp.Position - titanData.nape.Position).Magnitude
+                        if distanceToTitan < closestDistance then
+                            closestDistance = distanceToTitan
+                            closestTitan = titanData
                         end
                     end
                     
-                    currentTargetTitan = nil
-                    
-                    if not targetedTitan then
-                        task.wait(1)
+                    -- If we found a valid titan, attack it
+                    if closestTitan then
+                        -- First move to pre-attack position
+                        local napePart = closestTitan.nape
+                        local napePos = napePart.Position
+                        
+                        -- Calculate optimal attack position relative to nape
+                        local attackOffset = Vector3.new(15, 0, 15)  -- Stay 15 studs away on X and Z
+                        
+                        -- Safety check in case titan becomes invalid during movement
+                        if not isTitanValid(closestTitan.titan) then
+                            task.wait(0.1)
+                            continue
+                        end
+                        
+                        -- Calculate different offset positions based on mode
+                        if currentSlashMode == "Risky" then
+                            -- Risky gets very close
+                            attackOffset = Vector3.new(5, 0, 5)
+                        elseif currentSlashMode == "Safe" then
+                            -- Safe stays further away
+                            attackOffset = Vector3.new(25, 0, 25)
+                        end
+                        
+                        -- Approach position 
+                        moveToPosition(napePos - attackOffset, closestTitan.titan)
+                        
+                        -- If titan is still valid, slash through the nape
+                        if isTitanValid(closestTitan.titan) then
+                            slashThroughNape(napePart, closestTitan.titan)
+                        end
+                        
+                        -- Wait a bit before targeting next titan
+                        task.wait(0.25)
                     else
-                        task.wait(0.05)
+                        -- No titans found, wait a bit before checking again
+                        task.wait(0.5)
                     end
                 end
             end
-
-            -- Cleanup function
-            local function cleanup()
-                isSlashing = false
-                currentTargetTitan = nil
-                
-                for _, connection in pairs(connections) do
-                    if connection and connection.Connected then
-                        connection:Disconnect()
-                    end
+            
+            -- Stop existing autofarm if it's running
+            if _G.StopAutoFarm then
+                _G.StopAutoFarm()
+            end
+            
+            -- Setup cleanup function
+            _G.StopAutoFarm = function()
+                for _, connection in ipairs(connections) do
+                    connection:Disconnect()
                 end
+                
+                _G.M1SlashFarm = false
+                _G.SlashThroughHitboxEnabled = false
                 
                 if currentTween then
                     currentTween:Cancel()
                     currentTween = nil
                 end
                 
-                _G.M1SlashFarm = false
-            end
-
-            -- Setup cleanup on toggle off
-            local toggleOffConnection = RunService.Heartbeat:Connect(function()
-                if not _G.SlashThroughHitboxEnabled then
-                    cleanup()
-                    toggleOffConnection:Disconnect()
+                -- Restore collisions
+                if character then
+                    for _, part in pairs(character:GetDescendants()) do
+                        if part:IsA("BasePart") then
+                            part.CanCollide = true
+                        end
+                    end
                 end
-            end)
-            table.insert(connections, toggleOffConnection)
-
-            -- Run farm
+            end
+            
+            -- Start the farm
             enableNoClip()
+            setupTitanMonitor()
             checkMissionCompletion()
-            setupTitanMonitor()  -- Add titan monitor
-            
-            -- Setup cleanup on character respawn
-            local characterConnection = player.CharacterAdded:Connect(function(newCharacter)
-                character = newCharacter
-                hrp = character:WaitForChild("HumanoidRootPart")
-                task.wait(1)
-                enableNoClip()
-            end)
-            table.insert(connections, characterConnection)
-            
-            -- Start farming
-            task.spawn(autoFarm)
-            
+            autoFarm()
         else
-            -- Disable farm when toggle is turned off
-            _G.SlashThroughHitboxEnabled = false
-            _G.M1SlashFarm = false
+            -- Stop the farm
+            if _G.StopAutoFarm then
+                _G.StopAutoFarm()
+            end
         end
     end
 })
-
--- Add event listener to update when dropdown changes while toggle is active
-SlashModeDropdown:OnChanged(function()
-    if _G.SlashThroughHitboxEnabled then
-        -- Turn off and back on to apply new settings
-        SlashThroughHitboxToggle:Set(false)
-        task.wait(0.5)
-        SlashThroughHitboxToggle:Set(true)
-    end
-end)
 
 -- Add Auto Blade Reload Toggle to Features Tab (IMPROVED VERSION USING DIRECT REMOTES)
 local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
