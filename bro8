@@ -375,7 +375,7 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
             local Options = {
                 AutoFarm = { Value = true },
                 NapeExtender = { Value = true },
-                HitboxSize = { Value = 35 },
+                HitboxSize = { Value = 30 },
                 MoveSpeed = 120,
                 SlashSpeed = 130,
                 SlashDistance = 15,
@@ -639,15 +639,8 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
             
             -- Check mission completion and auto-retry with rate limiting
             local function checkMissionCompletion()
-    local lastRetryTime = 0
-    local retryAttempted = false
-    local retryDelay = 10 -- Minimum seconds between retry attempts
-    
     local connection = RunService.Heartbeat:Connect(function()
         if not _G.SlashThroughHitboxEnabled then return end
-        
-        -- Only check every 3 seconds to reduce frequency
-        if tick() % 3 > 0.1 then return end
         
         local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
         
@@ -655,14 +648,20 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
             local value = Slay.Value
             local requirement = Slay:GetAttribute("Requirement")
             
+            -- Add print statements for debugging
+            print("Current Slay Value: ", value)
+            print("Slay Requirement: ", requirement)
+            
             if value and requirement and value >= requirement then
+                print("Mission Completed! Attempting to retry...")
+                
                 -- Detect if we're on mobile
                 local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
 
                 task.wait(1)
                 
                 if isMobile then
-                    -- Mobile-specific UI navigation
+                    print("Using Mobile Navigation")
                     VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
                     task.wait(0.2)
                     
@@ -686,7 +685,7 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                         VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                     end
                 else
-                    -- PC navigation sequence
+                    print("Using PC Navigation")
                     VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
                     task.wait(0.1)
                     VIM:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
@@ -700,6 +699,7 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                 -- Recursive restart
                 task.wait(3)
                 if _G.SlashThroughHitboxEnabled then
+                    print("Restarting Farm Mode")
                     SlashThroughHitboxToggle:Set(false)
                     task.wait(0.5)
                     SlashThroughHitboxToggle:Set(true)
