@@ -639,100 +639,77 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
             
             -- Check mission completion and auto-retry with rate limiting
             local function checkMissionCompletion()
-                local lastRetryTime = 0
-                local retryAttempted = false
-                local retryDelay = 10 -- Minimum seconds between retry attempts
+    local lastRetryTime = 0
+    local retryAttempted = false
+    local retryDelay = 10 -- Minimum seconds between retry attempts
+    
+    local connection = RunService.Heartbeat:Connect(function()
+        if not _G.SlashThroughHitboxEnabled then return end
+        
+        -- Only check every 3 seconds to reduce frequency
+        if tick() % 3 > 0.1 then return end
+        
+        local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
+        
+        if Slay then
+            local value = Slay.Value
+            local requirement = Slay:GetAttribute("Requirement")
+            
+            if value and requirement and value >= requirement then
+                -- Detect if we're on mobile
+                local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+
+                task.wait(1)
                 
-                local connection = RunService.Heartbeat:Connect(function()
-                    if not _G.SlashThroughHitboxEnabled then return end
+                if isMobile then
+                    -- Mobile-specific UI navigation
+                    VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
+                    task.wait(0.2)
                     
-                    -- Only check every 3 seconds to reduce frequency
-                    if tick() % 3 > 0.1 then return end
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Down, false, game)
+                    task.wait(0.2)
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Down, false, game)
+                    task.wait(0.2)
                     
-                    local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                     
-                    if Slay then
-                        local value = Slay.Value
-                        local requirement = Slay:GetAttribute("Requirement")
-                        
-                        if value and requirement and value >= requirement then
-                            -- Prevent spamming retry
-                            if retryAttempted then return end
-                            
-                            -- Rate limit retry attempts
-                            if tick() - lastRetryTime < retryDelay then return end
-                            
-                            retryAttempted = true
-                            lastRetryTime = tick()
-                            
-                            task.wait(Options.WaitAfterCompletion)
-                            
-                            local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
-                            if not playerGui then 
-                                retryAttempted = false
-                                return 
-                            end
-                            
-                            local interface = playerGui:FindFirstChild("Interface")
-                            if not interface then 
-                                retryAttempted = false
-                                return 
-                            end
-                            
-                            local rewards = interface:FindFirstChild("Rewards")
-                            if not rewards then 
-                                retryAttempted = false
-                                return 
-                            end
-                            
-                            local main = rewards:FindFirstChild("Main")
-                            if not main then 
-                                retryAttempted = false
-                                return 
-                            end
-                            
-                            local info = main:FindFirstChild("Info")
-                            if not info then 
-                                retryAttempted = false
-                                return 
-                            end
-                            
-                            local mainInfo = info:FindFirstChild("Main")
-                            if not mainInfo then 
-                                retryAttempted = false
-                                return 
-                            end
-                            
-                            local buttons = mainInfo:FindFirstChild("Buttons")
-                            if not buttons then 
-                                retryAttempted = false
-                                return 
-                            end
-                            
-                            local retryButton = buttons:FindFirstChild("Retry")
-                            
-                            if retryButton then
-                                local buttonPos = retryButton.AbsolutePosition
-                                local buttonSize = retryButton.AbsoluteSize
-                                
-                                local clickX = buttonPos.X + (buttonSize.X / 2) + Options.ClickOffsetX
-                                local clickY = buttonPos.Y + (buttonSize.Y / 2) + Options.ClickOffsetY
-                                
-                                VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
-                                task.wait(0.1)
-                                VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
-                            end
-                            
-                            -- Reset retry flag after 5 seconds
-                            task.delay(5, function()
-                                retryAttempted = false
-                            end)
-                        end
+                    task.wait(1)
+                    
+                    -- Alternative mobile sequence if the first doesn't work
+                    if _G.SlashThroughHitboxEnabled then
+                        VIM:SendKeyEvent(true, Enum.KeyCode.Tab, false, game)
+                        task.wait(0.2)
+                        VIM:SendKeyEvent(true, Enum.KeyCode.Tab, false, game)
+                        task.wait(0.2)
+                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                     end
-                end)
+                else
+                    -- PC navigation sequence
+                    VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
+                    task.wait(0.1)
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
+                    task.wait(0.1)
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
+                    task.wait(0.1)
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                end
                 
-                table.insert(connections, connection)
+                -- Recursive restart
+                task.wait(3)
+                if _G.SlashThroughHitboxEnabled then
+                    SlashThroughHitboxToggle:Set(false)
+                    task.wait(0.5)
+                    SlashThroughHitboxToggle:Set(true)
+                end
             end
+        end
+    end)
+    
+    table.insert(connections, connection)
+end
 
             -- Main auto-farm loop with improved titan targeting and fixed height support
             local function autoFarm()
