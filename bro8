@@ -648,20 +648,16 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
             local value = Slay.Value
             local requirement = Slay:GetAttribute("Requirement")
             
-            -- Add print statements for debugging
-            print("Current Slay Value: ", value)
-            print("Slay Requirement: ", requirement)
+            -- Safe UserInputService check
+            local isMobile = false
+            if UserInputService then
+                isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+            end
             
             if value and requirement and value >= requirement then
-                print("Mission Completed! Attempting to retry...")
-                
-                -- Detect if we're on mobile
-                local isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-
                 task.wait(1)
                 
                 if isMobile then
-                    print("Using Mobile Navigation")
                     VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
                     task.wait(0.2)
                     
@@ -685,7 +681,6 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                         VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
                     end
                 else
-                    print("Using PC Navigation")
                     VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
                     task.wait(0.1)
                     VIM:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
@@ -699,7 +694,6 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                 -- Recursive restart
                 task.wait(3)
                 if _G.SlashThroughHitboxEnabled then
-                    print("Restarting Farm Mode")
                     SlashThroughHitboxToggle:Set(false)
                     task.wait(0.5)
                     SlashThroughHitboxToggle:Set(true)
