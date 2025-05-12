@@ -648,39 +648,23 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
             local value = Slay.Value
             local requirement = Slay:GetAttribute("Requirement")
             
-            -- Safe UserInputService check
-            local isMobile = false
-            if UserInputService then
-                isMobile = UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
-            end
-            
+            -- Check if mission is completed
             if value and requirement and value >= requirement then
                 task.wait(1)
                 
+                -- Detect mobile vs PC
+                local isMobile = UserInputService and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+                
                 if isMobile then
+                    -- Mobile navigation (two downs)
                     VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
                     task.wait(0.2)
-                    
-                    VIM:SendKeyEvent(true, Enum.KeyCode.Down, false, game)
+                    VIM:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
                     task.wait(0.2)
-                    VIM:SendKeyEvent(true, Enum.KeyCode.Down, false, game)
-                    task.wait(0.2)
-                    
                     VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
                     VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                    
-                    task.wait(1)
-                    
-                    -- Alternative mobile sequence if the first doesn't work
-                    if _G.SlashThroughHitboxEnabled then
-                        VIM:SendKeyEvent(true, Enum.KeyCode.Tab, false, game)
-                        task.wait(0.2)
-                        VIM:SendKeyEvent(true, Enum.KeyCode.Tab, false, game)
-                        task.wait(0.2)
-                        VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                        VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                    end
                 else
+                    -- PC navigation (two rights)
                     VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
                     task.wait(0.1)
                     VIM:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
@@ -693,10 +677,12 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                 
                 -- Recursive restart
                 task.wait(3)
-                if _G.SlashThroughHitboxEnabled then
-                    SlashThroughHitboxToggle:Set(false)
-                    task.wait(0.5)
-                    SlashThroughHitboxToggle:Set(true)
+                if _G.SlashThroughHitboxEnabled and SlashThroughHitboxToggle and SlashThroughHitboxToggle.Set then
+                    pcall(function()
+                        SlashThroughHitboxToggle:Set(false)
+                        task.wait(0.5)
+                        SlashThroughHitboxToggle:Set(true)
+                    end)
                 end
             end
         end
