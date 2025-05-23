@@ -375,7 +375,7 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
             local Options = {
                 AutoFarm = { Value = true },
                 NapeExtender = { Value = true },
-                HitboxSize = { Value = 30 },
+                HitboxSize = { Value = 35 },
                 MoveSpeed = 120,
                 SlashSpeed = 130,
                 SlashDistance = 15,
@@ -474,7 +474,7 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
                 startPos = Vector3.new(startPos.X, Options.AttackHeight.Value, startPos.Z)
                 endPos = Vector3.new(endPos.X, Options.AttackHeight.Value, endPos.Z)
                 
-                -- Normal movement for all mod
+                -- Normal movement for all modes
                 local distance = (endPos - startPos).Magnitude
                 local duration = distance / Options.SlashSpeed
                 local startTime = tick()
@@ -639,57 +639,100 @@ local SlashThroughHitboxToggle = Tabs.Features:AddToggle("SlashThroughHitbox", {
             
             -- Check mission completion and auto-retry with rate limiting
             local function checkMissionCompletion()
-    local connection = RunService.Heartbeat:Connect(function()
-        if not _G.SlashThroughHitboxEnabled then return end
-        
-        local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
-        
-        if Slay then
-            local value = Slay.Value
-            local requirement = Slay:GetAttribute("Requirement")
-            
-            -- Check if mission is completed
-            if value and requirement and value >= requirement then
-                task.wait(1)
+                local lastRetryTime = 0
+                local retryAttempted = false
+                local retryDelay = 10 -- Minimum seconds between retry attempts
                 
-                -- Detect mobile vs PC
-                local isMobile = UserInputService and UserInputService.TouchEnabled and not UserInputService.KeyboardEnabled
+                local connection = RunService.Heartbeat:Connect(function()
+                    if not _G.SlashThroughHitboxEnabled then return end
+                    
+                    -- Only check every 3 seconds to reduce frequency
+                    if tick() % 3 > 0.1 then return end
+                    
+                    local Slay = ReplicatedStorage.Objectives:FindFirstChild("Slay")
+                    
+                    if Slay then
+                        local value = Slay.Value
+                        local requirement = Slay:GetAttribute("Requirement")
+                        
+                        if value and requirement and value >= requirement then
+                            -- Prevent spamming retry
+                            if retryAttempted then return end
+                            
+                            -- Rate limit retry attempts
+                            if tick() - lastRetryTime < retryDelay then return end
+                            
+                            retryAttempted = true
+                            lastRetryTime = tick()
+                            
+                            task.wait(Options.WaitAfterCompletion)
+                            
+                            local playerGui = game:GetService("Players").LocalPlayer:FindFirstChild("PlayerGui")
+                            if not playerGui then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local interface = playerGui:FindFirstChild("Interface")
+                            if not interface then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local rewards = interface:FindFirstChild("Rewards")
+                            if not rewards then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local main = rewards:FindFirstChild("Main")
+                            if not main then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local info = main:FindFirstChild("Info")
+                            if not info then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local mainInfo = info:FindFirstChild("Main")
+                            if not mainInfo then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local buttons = mainInfo:FindFirstChild("Buttons")
+                            if not buttons then 
+                                retryAttempted = false
+                                return 
+                            end
+                            
+                            local retryButton = buttons:FindFirstChild("Retry")
+                            
+                            if retryButton then
+                                local buttonPos = retryButton.AbsolutePosition
+                                local buttonSize = retryButton.AbsoluteSize
+                                
+                                local clickX = buttonPos.X + (buttonSize.X / 2) + Options.ClickOffsetX
+                                local clickY = buttonPos.Y + (buttonSize.Y / 2) + Options.ClickOffsetY
+                                
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, true, game, 0)
+                                task.wait(0.1)
+                                VIM:SendMouseButtonEvent(clickX, clickY, 0, false, game, 0)
+                            end
+                            
+                            -- Reset retry flag after 5 seconds
+                            task.delay(5, function()
+                                retryAttempted = false
+                            end)
+                        end
+                    end
+                end)
                 
-                if isMobile then
-                    -- Mobile navigation (two downs)
-                    VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
-                    task.wait(0.2)
-                    VIM:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
-                    task.wait(0.2)
-                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                else
-                    -- PC navigation (two rights)
-                    VIM:SendKeyEvent(true, Enum.KeyCode.BackSlash, false, game)
-                    task.wait(0.1)
-                    VIM:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
-                    task.wait(0.1)
-                    VIM:SendKeyEvent(true, Enum.KeyCode.Right, false, game)
-                    task.wait(0.1)
-                    VIM:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
-                    VIM:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
-                end
-                
-                -- Recursive restart
-                task.wait(3)
-                if _G.SlashThroughHitboxEnabled and SlashThroughHitboxToggle and SlashThroughHitboxToggle.Set then
-                    pcall(function()
-                        SlashThroughHitboxToggle:Set(false)
-                        task.wait(0.5)
-                        SlashThroughHitboxToggle:Set(true)
-                    end)
-                end
+                table.insert(connections, connection)
             end
-        end
-    end)
-    
-    table.insert(connections, connection)
-end
 
             -- Main auto-farm loop with improved titan targeting and fixed height support
             local function autoFarm()
@@ -764,8 +807,8 @@ if Options.NapeExtender.Value then
             heightDifference * 1,            -- Very tall to guarantee hit
             Options.HitboxSize.Value * 11     -- Much deeper Z
         )
-
--- Position directly above the crawler
+        
+        -- Position directly above the crawler
         nape.Position = Vector3.new(
             titanBase.X,
             (titanBase.Y + Options.AttackHeight.Value) / 2, -- Centered between crawler and player
@@ -998,6 +1041,7 @@ local BladeReloadToggle = Tabs.Features:AddToggle("BladeReload", {
         end
     end
 })
+
 
 -- Add features to the Visual tab - some are conditional
 if not isInMainMenu then
